@@ -1,0 +1,29 @@
+name: Deploy DB Updates
+
+on:
+  push:
+    branches:
+      - main  # Trigger workflow on push to main branch
+    paths:
+      - 'db/updates/**'  # Trigger when files in 'db/updates' are updated
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up SSH to Lenovo Server
+      uses: webfactory/ssh-agent@v0.5.3
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY_MYMACAIR }}
+
+    - name: Trigger Deployment Script
+      run: |
+        ssh mike@192.168.100.93 << 'EOF'
+          cd /path/to/project
+          git pull origin main
+          /path/to/flyway migrate
+        EOF
