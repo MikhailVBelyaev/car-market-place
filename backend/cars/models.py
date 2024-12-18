@@ -4,16 +4,18 @@ from django.db import models
 
 class Car(models.Model):
     car_id = models.AutoField(primary_key=True)
-    brand = models.CharField(max_length=255)
-    model = models.CharField(max_length=255)
+    brand = models.CharField(max_length=255, default='Chevrolet')
+    model = models.CharField(max_length=255, default='Lacetti')
     year = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField()
+    mileage = models.IntegerField(null=True, blank=True)
 
     class Meta:
         db_table = 'cars'  # Maps to the existing table
         managed = False    # Prevents Django from altering the table
+        app_label = 'cars'  # Explicitly define the app label
 
     def __str__(self):
         return f"{self.brand},model: {self.model}; year: {self.year}; price: {self.price}; description: {self.description}"
