@@ -1,3 +1,5 @@
+#This will ignore any folder named temp no matter where it is located in the project structure.
+temp/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
