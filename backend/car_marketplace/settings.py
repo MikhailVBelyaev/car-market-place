@@ -11,6 +11,10 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # take environment variables from .env
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-l!vwu=q)k%82h!2w#hw)kfftnow)7ahs%n#8p+k@wyzju2jbb('
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -38,6 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'cars',
+    'rest_framework',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -48,6 +54,11 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
 ]
 
 ROOT_URLCONF = 'car_marketplace.urls'
@@ -70,25 +81,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'car_marketplace.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',              # Main PostgreSQL database
-        'USER': 'marketplace_user',      # The user you created
-        'PASSWORD': 'marketplace_user',     # User password
-        'HOST': 'localhost',             # Or the server IP
-        'PORT': '5432',                  # Default PostgreSQL port
+        'NAME': os.getenv('DB_NAME'),              # from .env
+        'USER': os.getenv('DB_USER'),              # from .env
+        'PASSWORD': os.getenv('DB_PASSWORD'),      # from .env
+        'HOST': os.getenv('DB_HOST', 'localhost'), # from .env or default
+        'PORT': os.getenv('DB_PORT', '5432'),      # from .env or default
         'OPTIONS': {
             'options': '-c search_path=marketplace'
         },

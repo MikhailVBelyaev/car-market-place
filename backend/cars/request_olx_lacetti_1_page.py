@@ -7,7 +7,7 @@ def fetch_page(url):
     return BeautifulSoup(response.content, 'html.parser')
 
 # Function to extract relevant information from a car ad
-def extract_car_ad_info(ad):
+def extract_car_ad_info_old(ad):
     car_info = {}
     
     # Find the car name (title)
@@ -35,6 +35,40 @@ def extract_car_ad_info(ad):
     if reference_url_tag and reference_url_tag.get('href'):
         car_info['reference_url'] = "https://www.olx.uz" + reference_url_tag['href']
     
+    return car_info
+
+# new version 5/05
+def extract_car_ad_info(ad):
+    car_info = {}
+
+    # Title
+    # old; css-1s3qyje
+    title = ad.find('h4', class_='css-1g61gc2')
+    if title:
+        car_info['name'] = title.get_text(strip=True)
+
+    # Price
+    price = ad.find('p', {'data-testid': 'ad-price'})
+    if price:
+        car_info['price'] = price.get_text(strip=True)
+
+    # Location and Date
+    location_date = ad.find('p', {'data-testid': 'location-date'})
+    if location_date:
+        car_info['location_date'] = location_date.get_text(strip=True)
+
+    # Mileage
+    mileage_container = ad.find('div', class_='css-1kfqt7f')
+    if mileage_container:
+        mileage_span = mileage_container.find('span', class_='css-6as4g5')
+        if mileage_span:
+            car_info['mileage'] = mileage_span.get_text(strip=True)
+
+    # Reference URL
+    url_tag = ad.find('a', class_='css-1tqlkj0')
+    if url_tag and url_tag.get('href'):
+        car_info['reference_url'] = "https://www.olx.uz" + url_tag['href']
+
     return car_info
 
 # Function to filter ads based on price and mileage

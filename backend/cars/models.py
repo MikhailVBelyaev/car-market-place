@@ -18,4 +18,9 @@ class Car(models.Model):
         app_label = 'cars'  # Explicitly define the app label
 
     def __str__(self):
-        return f"{self.brand},model: {self.model}; year: {self.year}; price: {self.price}; description: {self.description}"
+        return (
+            f"brand: {self.brand}, model: {self.model}\n"
+            f"year: {self.year}, price: {self.price}\n"
+            f"description: {self.description}\n"
+            f"created_at: {self.created_at}, mileage: {self.mileage}"
+        )
