@@ -4,6 +4,10 @@ from cars.models import Car
 import logging
 import locale
 from pytz import timezone
+import pandas as pd
+import os
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Set locale for month name parsing (Russian in this case)
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
@@ -13,6 +17,38 @@ tz_uzbekistan = timezone('Asia/Tashkent')
 
 # Conversion rate
 UZSUM_TO_USD = 13000
+
+def export_data_to_csv(brand="Chevrolet", model="Lacetti"):
+    """
+    Export filtered car data to CSV for ML training in Databricks.
+    Filters by brand, model, and excludes entries with missing values.
+    Adds created_at column to the CSV.
+    """
+    from cars.models import Car
+    import pandas as pd
+    import os
+
+    # Filter by brand, model and remove nulls
+    queryset = Car.objects.filter(
+        brand=brand,
+        model=model,
+        mileage__isnull=False,
+        price__isnull=False,
+        created_at__isnull=False
+    ).values("year", "mileage", "price", "created_at")
+
+    # Create DataFrame
+    df = pd.DataFrame.from_records(queryset)
+
+    # Ensure export directory exists (one step up from current file)
+    export_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'databricks', 'data'))
+    os.makedirs(export_dir, exist_ok=True)
+
+    # Export to CSV
+    export_path = os.path.join(export_dir, 'cars_latest.csv')
+    df.to_csv(export_path, index=False)
+
+    print(f"✅ CSV exported to: {export_path} (rows: {len(df)})")
 
 def parse_date(date_str):
     """
