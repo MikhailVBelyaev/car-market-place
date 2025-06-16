@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  tg_bot:
+    build:
+      context: ./tg_bot
+    env_file:
+      - ./tg_bot/.env
+    restart: always
