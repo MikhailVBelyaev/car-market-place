@@ -24,20 +24,24 @@ def predict_price(year, miles):
         "Content-Type": "application/json"
     }
     payload = {
-        "brand": BRAND,
-        "model": MODEL,
-        "gear": GEAR,
-        "year": year,
-        "miles": miles
+    "inputs": [
+        {
+            "year": year,
+            "mileage": miles
+        }
+        ]
     }
     response = requests.post(DATABRICKS_URL, json=payload, headers=headers)
     if response.status_code == 200:
-        price = response.json().get("price")
-        print(f"Predicted price for your car: {price}")
+        output = response.json()
+        price = output["predictions"][0]
+        rounded_price = round(price, -2)
+        print(f"Predicted price for your car: {int(rounded_price)} USD")
     else:
         print("Failed to get prediction:", response.text)
 
 def main():
+    print ("In MVP version, we only support Chevrolet Lacetti")
     year, miles = get_user_input()
     predict_price(year, miles)
 
