@@ -16,7 +16,7 @@ django.setup()
 
 # Now, you can safely import the models and other Django-dependent components
 from cars.request_olx_lacetti_1_page import scrape_olx_for_vehicles
-from cars.Scrape_olx_lacceti import process_vehicle_data, save_to_db
+from cars.Scrape_olx_lacceti import process_vehicle_data, save_to_db, export_data_to_csv
 from cars.models import Car
 
 def main():
@@ -36,6 +36,11 @@ def main():
     print("Saving data to database...")
     save_to_db(processed_data)
     print("Data saved successfully.")
+
+    # Step 4: Export to CSV
+    print("Exporting latest car data to CSV...")
+    export_data_to_csv(brand="Chevrolet", model="Lacetti")
+    print("CSV export complete.")
 
     print(f"Task completed at {datetime.now()}")
 
