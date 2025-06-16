@@ -5,7 +5,6 @@ import os
 # Fixed car info
 BRAND = "Chevrolet"
 MODEL = "Lacetti"
-GEAR = "AT"
 
 # Databricks API config (replace with your actual values)
 load_dotenv()
@@ -38,7 +37,10 @@ def predict_price(year, miles):
         rounded_price = round(price, -2)
         print(f"Predicted price for your car: {int(rounded_price)} USD")
     else:
-        print("Failed to get prediction:", response.text)
+        if "not ready" in response.text.lower():
+            print("The model is still loading. Please wait and try again in 1–2 minutes.")
+        else:
+            print("❌ Failed to get prediction:", response.text)
 
 def main():
     print ("In MVP version, we only support Chevrolet Lacetti")
