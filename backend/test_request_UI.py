@@ -1,3 +1,6 @@
+# This script is designed to predict the price of a Chevrolet Lacetti car based on user input for year and mileage.
+# It uses a machine learning model hosted on Databricks and requires the user to input valid year and mileage values.
+# The script handles input validation and API requests, providing feedback to the user
 import requests
 from dotenv import load_dotenv
 import os
@@ -13,8 +16,26 @@ DATABRICKS_URL = os.getenv("DATABRICKS_URL")
 DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
 
 def get_user_input():
-    year = int(input("Enter car year: "))
-    miles = int(input("Enter car mileage: "))
+    while True:
+        try:
+            year = int(input("Enter car year: "))
+            if not (2000 <= year <= 2025):
+                print("❌ Year must be between 2000 and 2025.")
+                continue
+            break
+        except ValueError:
+            print("❌ Please enter a valid integer for year.")
+    
+    while True:
+        try:
+            miles = int(input("Enter car mileage: "))
+            if not (0 <= miles <= 500000):
+                print("❌ Mileage must be between 0 and 500000.")
+                continue
+            break
+        except ValueError:
+            print("❌ Please enter a valid integer for mileage.")
+    
     return year, miles
 
 def predict_price(year, miles):
@@ -43,7 +64,7 @@ def predict_price(year, miles):
             print("❌ Failed to get prediction:", response.text)
 
 def main():
-    print ("In MVP version, we only support Chevrolet Lacetti")
+    print ("In MVP version, we only support Chevrolet Lacetti white.")
     year, miles = get_user_input()
     predict_price(year, miles)
 
