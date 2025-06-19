@@ -1,9 +1,16 @@
 import requests
 from bs4 import BeautifulSoup
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Function to fetch and parse a page
 def fetch_page(url):
     response = requests.get(url)
+    logging.info(f"Fetched page: {url}")
     return BeautifulSoup(response.content, 'html.parser')
 
 # Function to extract relevant information from a car ad
@@ -96,7 +103,7 @@ def scrape_olx_for_vehicles():
     base_url = 'https://www.olx.uz/list/q-lacceti/'  # Replace with the correct URL
     url = base_url  # Only scrape the first page
 
-    print(f"Scraping first page: {url}")
+    logging.info(f"Scraping first page: {url}")
     soup = fetch_page(url)
     
     # Find all vehicle-related ads (filter out non-vehicle ads like tires)
@@ -109,10 +116,10 @@ def scrape_olx_for_vehicles():
         car_info = extract_car_ad_info(ad)
         if car_info:
             all_vehicle_ads.append(car_info)
+            logging.debug(f"Ad extracted: {car_info}")
 
     # Filter out ads based on the price and mileage
     filtered_ads = filter_vehicle_ads(all_vehicle_ads)
+    logging.info(f"Total ads found: {len(all_vehicle_ads)}; After filtering: {len(filtered_ads)}")
 
     return filtered_ads
-
-
