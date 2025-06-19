@@ -1,5 +1,11 @@
 import os
 import sys
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Add the 'cars' directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'cars'))
@@ -20,29 +26,29 @@ from cars.Scrape_olx_lacceti import process_vehicle_data, save_to_db, export_dat
 from cars.models import Car
 
 def main():
-    print(f"Task started at {datetime.now()}")
+    logging.info(f"Task started at {datetime.now()}")
 
     # Step 1: Scrape data
-    print("Scraping data from OLX...")
+    logging.info("Scraping data from OLX...")
     vehicle_ads = scrape_olx_for_vehicles()
-    print(f"Scraped {len(vehicle_ads)} ads.")
+    logging.info(f"Scraped {len(vehicle_ads)} ads.")
 
     # Step 2: Process data
-    print("Processing scraped data...")
+    logging.info("Processing scraped data...")
     processed_data = process_vehicle_data(vehicle_ads)
-    print(f"Processed {len(processed_data)} ads.")
+    logging.info(f"Processed {len(processed_data)} ads.")
 
     # Step 3: Save to database
-    print("Saving data to database...")
+    logging.info("Saving data to database...")
     save_to_db(processed_data)
-    print("Data saved successfully.")
+    logging.info("Data saved successfully.")
 
     # Step 4: Export to CSV
-    print("Exporting latest car data to CSV...")
+    logging.info("Exporting latest car data to CSV...")
     export_data_to_csv(brand="Chevrolet", model="Lacetti")
-    print("CSV export complete.")
+    logging.info("CSV export complete.")
 
-    print(f"Task completed at {datetime.now()}")
+    logging.info(f"Task completed at {datetime.now()}")
 
 if __name__ == "__main__":
     main()

@@ -41,14 +41,15 @@ def export_data_to_csv(brand="Chevrolet", model="Lacetti"):
     df = pd.DataFrame.from_records(queryset)
 
     # Ensure export directory exists (one step up from current file)
-    export_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'databricks', 'data'))
+    # export_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'databricks', 'data'))
+    export_dir = '/app/databricks/data'
     os.makedirs(export_dir, exist_ok=True)
 
     # Export to CSV
     export_path = os.path.join(export_dir, 'cars_latest.csv')
     df.to_csv(export_path, index=False)
 
-    print(f"✅ CSV exported to: {export_path} (rows: {len(df)})")
+    logging.info(f"✅ CSV exported to: {export_path} (rows: {len(df)})")
 
 def parse_date(date_str):
     """
@@ -144,10 +145,10 @@ def save_to_db(processed_ads):
                         created_at=ad["created_at"],
                         mileage=ad["mileage"],
                     )
-                    print(f"Saved car: {ad['brand']} {ad['model']} {ad['year']}")  # Log successful save
+                    logging.info(f"Saved car: {ad['brand']} {ad['model']} {ad['year']}")
                 except Exception as e:
                     logging.error(f"Error saving car {ad['brand']} {ad['model']}: {e}")
             else:
-                print(f"Car already exists: {ad['brand']} {ad['model']} {ad['year']}")  # Log duplicates
+                logging.info(f"Car already exists: {ad['brand']} {ad['model']} {ad['year']}")
         else:
-            print(f"Skipping invalid ad: {ad}")  # Log invalid ads
+            logging.warning(f"Skipping invalid ad: {ad}")
