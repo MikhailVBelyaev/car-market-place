@@ -2,6 +2,8 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1
 
+RUN apt-get update && apt-get install -y curl && apt-get clean
+
 WORKDIR /app
 
 COPY manage.py .
@@ -16,9 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY car_marketplace/ car_marketplace/
 COPY cars/ cars/
 COPY run_task_lacetti_white.py .
-
-# Ensure .env exists at correct path for Django
-COPY car_marketplace/.env /app/car_marketplace/.env
 
 # Fallback command (overridden by docker-compose)
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

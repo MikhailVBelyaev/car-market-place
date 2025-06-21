@@ -16,8 +16,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
+
+def index_view(request):
+    return JsonResponse({
+        "message": "This is an information portal for collecting car advertisement data and providing price prediction based on your car details."
+    })
 
 urlpatterns = [
+    path('', index_view),
     path('admin/', admin.site.urls),
     path('api/', include('cars.urls')),  # Prefix all car API routes with `/api/`
 ]
