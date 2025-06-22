@@ -1,5 +1,5 @@
 -- Example: Adding a new table for user reviews of cars
-CREATE TABLE IF NOT EXISTS reviews (
+CREATE TABLE IF NOT EXISTS marketplace.reviews (
     review_id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
     car_id INT REFERENCES cars(car_id) ON DELETE CASCADE,
@@ -9,13 +9,13 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 
 -- Example: Creating a table for car categories (e.g., sedan, SUV, etc.)
-CREATE TABLE IF NOT EXISTS categories (
+CREATE TABLE IF NOT EXISTS marketplace.categories (
     category_id SERIAL PRIMARY KEY,
     category_name VARCHAR(255) UNIQUE NOT NULL
 );
 
 -- Example: Associating cars with categories (many-to-many relationship)
-CREATE TABLE IF NOT EXISTS car_categories (
+CREATE TABLE IF NOT EXISTS marketplace.car_categories (
     car_id INT REFERENCES cars(car_id) ON DELETE CASCADE,
     category_id INT REFERENCES categories(category_id) ON DELETE CASCADE,
     PRIMARY KEY (car_id, category_id)

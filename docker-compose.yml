@@ -9,11 +9,24 @@ services:
     ports:
       - "8000:8000"
     restart: always
+    depends_on:
+      - postgres
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 10s
       timeout: 3s
       retries: 10
+  postgres:
+    build:
+      context: ./db
+    restart: always
+    env_file:
+      - ./db/.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
 
   tg_bot:
     build:
@@ -25,6 +38,7 @@ services:
   cron:
     build:
       context: ./backend
+    profiles: ["disabled"]
     command: >
       sh -c "
       echo '🕒 Waiting for Django...';
@@ -42,6 +56,18 @@ services:
     restart: always
     depends_on:
       - django
+  
+  scraper:
+    build:
+      context: .
+      dockerfile: scraper/Dockerfile
+    volumes:
+      - ./scraper:/app/scraper
+      - ./backend:/app/backend
+      - databricks_data:/app/databricks/data
+    depends_on:
+      - django
+    restart: always
 
   databricks:
     image: python:3.12-slim
@@ -50,5 +76,74 @@ services:
     working_dir: /app/databricks/data
     command: tail -f /dev/null
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+  
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  airflow-webserver:
+    image: apache/airflow:2.9.1
+    restart: always
+    command: webserver
+    environment: &airflow_env
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://marketplace_user:marketplace_user@postgres:5432/postgres
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    depends_on:
+      - postgres
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.1
+    restart: always
+    command: scheduler
+    environment: *airflow_env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    depends_on:
+      - postgres
+      
 volumes:
   databricks_data:
+  grafana_data:
+  pg_data:
+  esdata:
+  airflow_data:

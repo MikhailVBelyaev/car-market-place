@@ -5,3 +5,5 @@ Best Practices
 	3.	Test Updates: Use a staging environment to test scripts before running them in production.
 	4.	Automate CI/CD Pipelines: Automate the delivery process using CI/CD pipelines to reduce manual errors. (GitHub Actions)
 	5. Use Jenkins for CI/CD. Run all components (including Jenkins) in Docker containers for consistency and isolation.
+	6. Use Apache Airflow for Task Orchestration:  
+	   Integrate Airflow to schedule and manage complex workflows such as scraping, data exports, and ML model execution. Keep DAGs in version control and use Dockerized Airflow for environment consistency.

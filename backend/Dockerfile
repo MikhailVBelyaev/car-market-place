@@ -17,7 +17,7 @@ ENV LC_ALL=ru_RU.UTF-8
 RUN pip install --no-cache-dir -r requirements.txt
 COPY car_marketplace/ car_marketplace/
 COPY cars/ cars/
-COPY run_task_lacetti_white.py .
+# COPY run_task_lacetti_white.py .
 
 # Fallback command (overridden by docker-compose)
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

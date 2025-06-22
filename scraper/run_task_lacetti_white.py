@@ -25,7 +25,8 @@ API_URL = 'http://localhost:8000/api/cars/'  # Update with your actual API endpo
 API_URL = 'http://django:8000/api/cars/' 
 
 # Set up Django environment
-sys.path.append(os.path.join(os.path.dirname(__file__), 'cars'))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
+# sys.path.append(os.path.join(os.path.dirname(__file__), 'cars'))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "car_marketplace.settings")
 import django
 django.setup()
