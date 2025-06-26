@@ -14,7 +14,6 @@ function CarList() {
     brand: '',
     model: '',
     year: '',
-    // price and mileage are not in backend filter_config, handled separately
     price: '',
     mileage: ''
   });
@@ -30,7 +29,10 @@ function CarList() {
     }
 
     fetch(`${API_URL}?${query.toString()}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
@@ -55,7 +57,10 @@ function CarList() {
       }
     }
     fetch(`${API_URL}?${query.toString()}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
@@ -75,50 +80,16 @@ function CarList() {
       }
     }
     fetch(`${API_URL}?${query.toString()}`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
       })
       .catch(err => console.error(`Error fetching ${filterKey}:`, err));
   };
-
-  // Handle price and mileage ranges (not in backend filter_config)
-  const handleRangeFilterClick = (filterKey, range) => {
-    setFilters(prevFilters => ({ ...prevFilters, [filterKey]: range }));
-    setCurrentPage(1);
-    const updatedFilters = { ...filters, [filterKey]: range };
-    const query = new URLSearchParams();
-    for (const key in updatedFilters) {
-      if (updatedFilters[key]) {
-        query.append(key, updatedFilters[key]);
-      }
-    }
-    fetch(`${API_URL}?${query.toString()}`)
-      .then(res => res.json())
-      .then(data => {
-        setCars(data.results || []);
-        setFilterConfig(data.filters || {});
-      })
-      .catch(err => console.error(`Error fetching ${filterKey}:`, err));
-  };
-
-  // Hardcoded ranges for price and mileage (since not in backend filter_config)
-  const priceRanges = [
-    { label: 'Under $5,000', value: '0-5000' },
-    { label: '$5,000 - $10,000', value: '5000-10000' },
-    { label: '$10,000 - $20,000', value: '10000-20000' },
-    { label: '$20,000 - $50,000', value: '20000-50000' },
-    { label: 'Over $50,000', value: '50000-' }
-  ];
-
-  const mileageRanges = [
-    { label: 'Under 50,000 km', value: '0-50000' },
-    { label: '50,000 - 100,000 km', value: '50000-100000' },
-    { label: '100,000 - 150,000 km', value: '100000-150000' },
-    { label: '150,000 - 200,000 km', value: '150000-200000' },
-    { label: 'Over 200,000 km', value: '200000-' }
-  ];
 
   const totalPages = Math.ceil(cars.length / rowsPerPage);
   const displayedCars = cars.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
@@ -388,84 +359,6 @@ function CarList() {
             )}
           </div>
         ))}
-        {/* Price Filter (Hardcoded) */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Price:</label>
-          <div>
-            {priceRanges.map(range => (
-              <label
-                key={range.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                  fontWeight: filters.price === range.value ? 600 : 400,
-                  color: filters.price === range.value ? '#1a73e8' : '#000'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.price === range.value}
-                  onChange={() => handleRangeFilterClick('price', filters.price === range.value ? '' : range.value)}
-                  style={{ marginRight: '8px', accentColor: '#1a73e8' }}
-                />
-                {range.label}
-              </label>
-            ))}
-            {filters.price && (
-              <a
-                href="#!"
-                onClick={e => {
-                  e.preventDefault();
-                  handleRangeFilterClick('price', '');
-                }}
-                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
-              >
-                Clear price filter
-              </a>
-            )}
-          </div>
-        </div>
-        {/* Mileage Filter (Hardcoded) */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Mileage:</label>
-          <div>
-            {mileageRanges.map(range => (
-              <label
-                key={range.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                  fontWeight: filters.mileage === range.value ? 600 : 400,
-                  color: filters.mileage === range.value ? '#1a73e8' : '#000'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.mileage === range.value}
-                  onChange={() => handleRangeFilterClick('mileage', filters.mileage === range.value ? '' : range.value)}
-                  style={{ marginRight: '8px', accentColor: '#1a73e8' }}
-                />
-                {range.label}
-              </label>
-            ))}
-            {filters.mileage && (
-              <a
-                href="#!"
-                onClick={e => {
-                  e.preventDefault();
-                  handleRangeFilterClick('mileage', '');
-                }}
-                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
-              >
-                Clear mileage filter
-              </a>
-            )}
-          </div>
-        </div>
       </aside>
       <main style={containerStyle}>
         <div style={{ paddingTop: '85px', maxWidth: '1200px', margin: '0 auto' }}>
