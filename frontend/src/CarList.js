@@ -4,6 +4,7 @@ const API_URL = "/api/cars/filtered-list/";
 
 function CarList() {
   const [cars, setCars] = useState([]);
+  const [filterConfig, setFilterConfig] = useState({});
   const [filters, setFilters] = useState({
     fuel_type: '',
     gear_type: '',
@@ -13,6 +14,7 @@ function CarList() {
     brand: '',
     model: '',
     year: '',
+    // price and mileage are not in backend filter_config, handled separately
     price: '',
     mileage: ''
   });
@@ -30,26 +32,22 @@ function CarList() {
     fetch(`${API_URL}?${query.toString()}`)
       .then(res => res.json())
       .then(data => {
-        setCars(data);
+        setCars(data.results || []);
+        setFilterConfig(data.filters || {});
         setCurrentPage(1);
       })
-      .catch(err => console.error(err));
+      .catch(err => console.error('Error fetching cars:', err));
   };
 
   useEffect(() => {
-    fetchCars(); // initial load
+    fetchCars(); // Initial load
   }, []);
 
-  const handleChange = (e) => {
-    setFilters({ ...filters, [e.target.name]: e.target.value });
-  };
-
-  // For mileage range checkboxes
-  const handleMileageRangeClick = (range) => {
-    setFilters(prevFilters => ({ ...prevFilters, mileage: range }));
+  const handleCheckboxFilterClick = (filterKey, value) => {
+    const newValue = filters[filterKey] === value ? '' : value;
+    setFilters(prevFilters => ({ ...prevFilters, [filterKey]: newValue }));
     setCurrentPage(1);
-    // Fetch cars after updating filters
-    const updatedFilters = { ...filters, mileage: range };
+    const updatedFilters = { ...filters, [filterKey]: newValue };
     const query = new URLSearchParams();
     for (const key in updatedFilters) {
       if (updatedFilters[key]) {
@@ -59,10 +57,61 @@ function CarList() {
     fetch(`${API_URL}?${query.toString()}`)
       .then(res => res.json())
       .then(data => {
-        setCars(data);
+        setCars(data.results || []);
+        setFilterConfig(data.filters || {});
       })
-      .catch(err => console.error(err));
+      .catch(err => console.error(`Error fetching ${filterKey}:`, err));
   };
+
+  const handleDropdownFilterChange = (filterKey, e) => {
+    const value = e.target.value;
+    setFilters(prevFilters => ({ ...prevFilters, [filterKey]: value }));
+    setCurrentPage(1);
+    const updatedFilters = { ...filters, [filterKey]: value };
+    const query = new URLSearchParams();
+    for (const key in updatedFilters) {
+      if (updatedFilters[key]) {
+        query.append(key, updatedFilters[key]);
+      }
+    }
+    fetch(`${API_URL}?${query.toString()}`)
+      .then(res => res.json())
+      .then(data => {
+        setCars(data.results || []);
+        setFilterConfig(data.filters || {});
+      })
+      .catch(err => console.error(`Error fetching ${filterKey}:`, err));
+  };
+
+  // Handle price and mileage ranges (not in backend filter_config)
+  const handleRangeFilterClick = (filterKey, range) => {
+    setFilters(prevFilters => ({ ...prevFilters, [filterKey]: range }));
+    setCurrentPage(1);
+    const updatedFilters = { ...filters, [filterKey]: range };
+    const query = new URLSearchParams();
+    for (const key in updatedFilters) {
+      if (updatedFilters[key]) {
+        query.append(key, updatedFilters[key]);
+      }
+    }
+    fetch(`${API_URL}?${query.toString()}`)
+      .then(res => res.json())
+      .then(data => {
+        setCars(data.results || []);
+        setFilterConfig(data.filters || {});
+      })
+      .catch(err => console.error(`Error fetching ${filterKey}:`, err));
+  };
+
+  // Hardcoded ranges for price and mileage (since not in backend filter_config)
+  const priceRanges = [
+    { label: 'Under $5,000', value: '0-5000' },
+    { label: '$5,000 - $10,000', value: '5000-10000' },
+    { label: '$10,000 - $20,000', value: '10000-20000' },
+    { label: '$20,000 - $50,000', value: '20000-50000' },
+    { label: 'Over $50,000', value: '50000-' }
+  ];
+
   const mileageRanges = [
     { label: 'Under 50,000 km', value: '0-50000' },
     { label: '50,000 - 100,000 km', value: '50000-100000' },
@@ -71,48 +120,10 @@ function CarList() {
     { label: 'Over 200,000 km', value: '200000-' }
   ];
 
-  const handlePriceRangeClick = (range) => {
-    setFilters(prevFilters => ({ ...prevFilters, price: range }));
-    setCurrentPage(1);
-    // Fetch cars after updating filters
-    const updatedFilters = { ...filters, price: range };
-    const query = new URLSearchParams();
-    for (const key in updatedFilters) {
-      if (updatedFilters[key]) {
-        query.append(key, updatedFilters[key]);
-      }
-    }
-    fetch(`${API_URL}?${query.toString()}`)
-      .then(res => res.json())
-      .then(data => {
-        setCars(data);
-      })
-      .catch(err => console.error(err));
-  };
-
-  const handleFuelTypeClick = (type) => {
-    const newFuelType = filters.fuel_type === type ? '' : type;
-    setFilters(prevFilters => ({ ...prevFilters, fuel_type: newFuelType }));
-    setCurrentPage(1);
-    const updatedFilters = { ...filters, fuel_type: newFuelType };
-    const query = new URLSearchParams();
-    for (const key in updatedFilters) {
-      if (updatedFilters[key]) {
-        query.append(key, updatedFilters[key]);
-      }
-    }
-    fetch(`${API_URL}?${query.toString()}`)
-      .then(res => res.json())
-      .then(data => {
-        setCars(data);
-      })
-      .catch(err => console.error(err));
-  };
-
   const totalPages = Math.ceil(cars.length / rowsPerPage);
   const displayedCars = cars.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  // Responsive sidebar and container style
+  // Styles (unchanged from original for consistency)
   const sidebarStyle = {
     width: '250px',
     minWidth: '200px',
@@ -136,7 +147,6 @@ function CarList() {
     boxSizing: 'border-box',
   };
 
-  // Responsive table
   const tableStyle = {
     width: '100%',
     borderCollapse: 'separate',
@@ -165,66 +175,6 @@ function CarList() {
     fontFamily: 'Amazon Ember, Arial, sans-serif'
   };
 
-  const priceRanges = [
-    { label: 'Under $5,000', value: '0-5000' },
-    { label: '$5,000 - $10,000', value: '5000-10000' },
-    { label: '$10,000 - $20,000', value: '10000-20000' },
-    { label: '$20,000 - $50,000', value: '20000-50000' },
-    { label: 'Over $50,000', value: '50000-' }
-  ];
-
-  const fuelTypes = [
-    { label: 'Petrol', value: 'Petrol' },
-    { label: 'Diesel', value: 'Diesel' },
-    { label: 'Electric', value: 'Electric' }
-  ];
-
-  // Predefined options for gear_type, brand, and year
-  const gearTypes = [
-    { label: 'Automatic', value: 'Automatic' },
-    { label: 'Manual', value: 'Manual' },
-    { label: 'CVT', value: 'CVT' }
-  ];
-
-  const brands = [
-    { label: 'Toyota', value: 'Toyota' },
-    { label: 'Honda', value: 'Honda' },
-    { label: 'BMW', value: 'BMW' },
-    { label: 'Ford', value: 'Ford' },
-    { label: 'Chevrolet', value: 'Chevrolet' }
-  ];
-
-  const years = [
-    { label: '2024', value: '2024' },
-    { label: '2023', value: '2023' },
-    { label: '2022', value: '2022' },
-    { label: '2021', value: '2021' },
-    { label: '2020', value: '2020' },
-    { label: '2019', value: '2019' },
-    { label: '2018', value: '2018' }
-  ];
-
-  // Generic handler for filters with checkbox style (single select)
-  const handleCheckboxFilterClick = (filterKey, value) => {
-    const newValue = filters[filterKey] === value ? '' : value;
-    setFilters(prevFilters => ({ ...prevFilters, [filterKey]: newValue }));
-    setCurrentPage(1);
-    const updatedFilters = { ...filters, [filterKey]: newValue };
-    const query = new URLSearchParams();
-    for (const key in updatedFilters) {
-      if (updatedFilters[key]) {
-        query.append(key, updatedFilters[key]);
-      }
-    }
-    fetch(`${API_URL}?${query.toString()}`)
-      .then(res => res.json())
-      .then(data => {
-        setCars(data);
-      })
-      .catch(err => console.error(err));
-  };
-
-  // Responsive header and search bar
   return (
     <>
       <header
@@ -261,27 +211,19 @@ function CarList() {
           }}>
             Mooods
           </h1>
-          {/* Search Box */}
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              fetchCars();
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: '#fff',
-              borderRadius: '30px',
-              padding: '4px 10px',
-              boxShadow: '0 2px 8px 0 rgba(0,0,0,0.05)'
-            }}
-          >
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: '#fff',
+            borderRadius: '30px',
+            padding: '4px 10px',
+            boxShadow: '0 2px 8px 0 rgba(0,0,0,0.05)'
+          }}>
             <input
               type="text"
               placeholder="Search description, location, model..."
               value={filters.model}
-              name="model"
-              onChange={handleChange}
+              onChange={e => setFilters(prev => ({ ...prev, model: e.target.value }))}
               style={{
                 border: 'none',
                 outline: 'none',
@@ -293,7 +235,7 @@ function CarList() {
               }}
             />
             <button
-              type="submit"
+              onClick={fetchCars}
               style={{
                 background: 'linear-gradient(90deg,#2874f0 0%,#0057b8 100%)',
                 color: '#fff',
@@ -310,7 +252,7 @@ function CarList() {
             >
               Search
             </button>
-          </form>
+          </div>
         </div>
       </header>
       <aside style={sidebarStyle}>
@@ -359,7 +301,6 @@ function CarList() {
                 mileage: ''
               });
               setCurrentPage(1);
-              // Refetch with cleared filters
               setTimeout(fetchCars, 0);
             }}
             style={{
@@ -389,25 +330,106 @@ function CarList() {
             Clear All Filters
           </button>
         </div>
-        {/* All filter fields except price and model (model is search box) */}
-        {Object.keys(filters).map((key) => {
-          if (key === 'price' || key === 'model') return null;
-          return (
-            <div key={key} style={{ marginBottom: '12px' }}>
-              <label htmlFor={key} style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px' }}>{key.replace('_', ' ')}:</label>
-              <input
-                type="text"
-                id={key}
-                name={key}
-                value={filters[key]}
-                onChange={handleChange}
+        {/* Dynamic Filters from Backend */}
+        {Object.entries(filterConfig).map(([key, config]) => (
+          <div key={key} style={{ marginBottom: '24px' }}>
+            <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>
+              {key.replace('_', ' ')}:
+            </label>
+            {config.type === 'checkbox' ? (
+              <div>
+                {config.options.map(option => (
+                  <label
+                    key={option.value}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      marginBottom: '6px',
+                      cursor: 'pointer',
+                      fontWeight: filters[key] === option.value ? 600 : 400,
+                      color: filters[key] === option.value ? '#1a73e8' : '#000'
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={filters[key] === option.value}
+                      onChange={() => handleCheckboxFilterClick(key, option.value)}
+                      style={{ marginRight: '8px', accentColor: '#1a73e8' }}
+                    />
+                    {option.label} ({option.count})
+                  </label>
+                ))}
+                {filters[key] && (
+                  <a
+                    href="#!"
+                    onClick={e => {
+                      e.preventDefault();
+                      handleCheckboxFilterClick(key, '');
+                    }}
+                    style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Clear {key.replace('_', ' ')} filter
+                  </a>
+                )}
+              </div>
+            ) : (
+              <select
+                value={filters[key] || ''}
+                onChange={e => handleDropdownFilterChange(key, e)}
                 style={{ width: '100%', padding: '6px', boxSizing: 'border-box' }}
-              />
-            </div>
-          )
-        })}
+              >
+                <option value="">Select {key.replace('_', ' ')}</option>
+                {config.options.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        ))}
+        {/* Price Filter (Hardcoded) */}
         <div style={{ marginBottom: '24px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Mileage Range:</label>
+          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Price:</label>
+          <div>
+            {priceRanges.map(range => (
+              <label
+                key={range.value}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginBottom: '6px',
+                  cursor: 'pointer',
+                  fontWeight: filters.price === range.value ? 600 : 400,
+                  color: filters.price === range.value ? '#1a73e8' : '#000'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={filters.price === range.value}
+                  onChange={() => handleRangeFilterClick('price', filters.price === range.value ? '' : range.value)}
+                  style={{ marginRight: '8px', accentColor: '#1a73e8' }}
+                />
+                {range.label}
+              </label>
+            ))}
+            {filters.price && (
+              <a
+                href="#!"
+                onClick={e => {
+                  e.preventDefault();
+                  handleRangeFilterClick('price', '');
+                }}
+                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
+              >
+                Clear price filter
+              </a>
+            )}
+          </div>
+        </div>
+        {/* Mileage Filter (Hardcoded) */}
+        <div style={{ marginBottom: '24px' }}>
+          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Mileage:</label>
           <div>
             {mileageRanges.map(range => (
               <label
@@ -424,7 +446,7 @@ function CarList() {
                 <input
                   type="checkbox"
                   checked={filters.mileage === range.value}
-                  onChange={() => handleMileageRangeClick(filters.mileage === range.value ? '' : range.value)}
+                  onChange={() => handleRangeFilterClick('mileage', filters.mileage === range.value ? '' : range.value)}
                   style={{ marginRight: '8px', accentColor: '#1a73e8' }}
                 />
                 {range.label}
@@ -435,7 +457,7 @@ function CarList() {
                 href="#!"
                 onClick={e => {
                   e.preventDefault();
-                  handleMileageRangeClick('');
+                  handleRangeFilterClick('mileage', '');
                 }}
                 style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
               >
@@ -444,200 +466,7 @@ function CarList() {
             )}
           </div>
         </div>
-        <div style={{ marginBottom: '12px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px' }}>Price:</label>
-          <div>
-            {priceRanges.map(range => (
-              <a
-                key={range.value}
-                href="#!"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handlePriceRangeClick(range.value);
-                }}
-                style={{
-                  display: 'block',
-                  padding: '6px 0',
-                  color: filters.price === range.value ? 'blue' : '#000',
-                  cursor: 'pointer',
-                  textDecoration: filters.price === range.value ? 'underline' : 'none'
-                }}
-              >
-                {range.label}
-              </a>
-            ))}
-            {filters.price && (
-              <a
-                href="#!"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handlePriceRangeClick('');
-                }}
-                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer' }}
-              >
-                Clear price filter
-              </a>
-            )}
-          </div>
-        </div>
-        {/* Fuel Type Filter */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Fuel Type:</label>
-          <div>
-            {fuelTypes.map(type => (
-              <label
-                key={type.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                  fontWeight: filters.fuel_type === type.value ? 600 : 400,
-                  color: filters.fuel_type === type.value ? '#1a73e8' : '#000'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.fuel_type === type.value}
-                  onChange={() => handleFuelTypeClick(type.value)}
-                  style={{ marginRight: '8px', accentColor: '#1a73e8' }}
-                />
-                {type.label}
-              </label>
-            ))}
-            {filters.fuel_type && (
-              <a
-                href="#!"
-                onClick={e => {
-                  e.preventDefault();
-                  handleFuelTypeClick('');
-                }}
-                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
-              >
-                Clear fuel type filter
-              </a>
-            )}
-          </div>
-        </div>
-        {/* Gear Type Filter */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Gear Type:</label>
-          <div>
-            {gearTypes.map(type => (
-              <label
-                key={type.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                  fontWeight: filters.gear_type === type.value ? 600 : 400,
-                  color: filters.gear_type === type.value ? '#1a73e8' : '#000'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.gear_type === type.value}
-                  onChange={() => handleCheckboxFilterClick('gear_type', type.value)}
-                  style={{ marginRight: '8px', accentColor: '#1a73e8' }}
-                />
-                {type.label}
-              </label>
-            ))}
-            {filters.gear_type && (
-              <a
-                href="#!"
-                onClick={e => {
-                  e.preventDefault();
-                  handleCheckboxFilterClick('gear_type', '');
-                }}
-                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
-              >
-                Clear gear type filter
-              </a>
-            )}
-          </div>
-        </div>
-        {/* Brand Filter */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Brand:</label>
-          <div>
-            {brands.map(type => (
-              <label
-                key={type.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                  fontWeight: filters.brand === type.value ? 600 : 400,
-                  color: filters.brand === type.value ? '#1a73e8' : '#000'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.brand === type.value}
-                  onChange={() => handleCheckboxFilterClick('brand', type.value)}
-                  style={{ marginRight: '8px', accentColor: '#1a73e8' }}
-                />
-                {type.label}
-              </label>
-            ))}
-            {filters.brand && (
-              <a
-                href="#!"
-                onClick={e => {
-                  e.preventDefault();
-                  handleCheckboxFilterClick('brand', '');
-                }}
-                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
-              >
-                Clear brand filter
-              </a>
-            )}
-          </div>
-        </div>
-        {/* Year Filter */}
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>Year:</label>
-          <div>
-            {years.map(type => (
-              <label
-                key={type.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  marginBottom: '6px',
-                  cursor: 'pointer',
-                  fontWeight: filters.year === type.value ? 600 : 400,
-                  color: filters.year === type.value ? '#1a73e8' : '#000'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={filters.year === type.value}
-                  onChange={() => handleCheckboxFilterClick('year', type.value)}
-                  style={{ marginRight: '8px', accentColor: '#1a73e8' }}
-                />
-                {type.label}
-              </label>
-            ))}
-            {filters.year && (
-              <a
-                href="#!"
-                onClick={e => {
-                  e.preventDefault();
-                  handleCheckboxFilterClick('year', '');
-                }}
-                style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
-              >
-                Clear year filter
-              </a>
-            )}
-          </div>
-        </div>
       </aside>
-
       <main style={containerStyle}>
         <div style={{ paddingTop: '85px', maxWidth: '1200px', margin: '0 auto' }}>
           <h2 style={{
