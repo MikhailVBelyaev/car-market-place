@@ -140,6 +140,17 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
     depends_on:
       - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"
+    restart: always
+    depends_on:
+      - django
+    volumes:
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/nginx.conf:ro
       
 volumes:
   databricks_data:
