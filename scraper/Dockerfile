@@ -30,6 +30,6 @@ CMD sh -c "\
   done; \
   echo '✅ Django is up'; \
   while true; do \
-    python /app/scraper/run_task_lacetti_white.py; \
+    python /app/scraper/run_task_scraping_olx_vehicle.py; \
     sleep 3600; \
   done"

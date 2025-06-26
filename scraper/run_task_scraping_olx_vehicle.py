@@ -28,8 +28,8 @@ def log(msg):
     logging.info(msg)
 
 # Constants
-API_URL = 'http://localhost:8000/api/cars/'  # Update with your actual API endpoint
-API_URL = 'http://django:8000/api/cars/' 
+API_URL_DB = 'http://django:8000/api/cars/'
+API_URL_FILTERED = 'http://django:8000/api/cars/filtered-list/'
 
 
 def load_brands_and_models():
@@ -154,6 +154,18 @@ def process_vehicle_data(vehicle_ads, brand, model):
                 params_div = detail_html.find('div', {'data-testid': 'ad-parameters-container'})
                 if params_div:
                     params = params_div.find_all('p', class_='css-1los5bp')
+                    # Inserted model check block
+                    model_check_passed = True
+                    for param in params:
+                        text = param.get_text(strip=True)
+                        if text.startswith('Модель:'):
+                            detail_model = text.split(':', 1)[-1].strip().lower()
+                            if detail_model != model.lower():
+                                log(f"⏩ Skipping ad due to model mismatch: expected '{model}', found '{detail_model}'")
+                                model_check_passed = False
+                                break
+                    if not model_check_passed:
+                        continue
                     for param in params:
                         text = param.get_text(strip=True)
                         if 'Коробка передач:' in text:
@@ -294,13 +306,13 @@ def save_to_db(processed_ads):
 
                 # Check if the ad with car_ad_id already exists
                 params = {"car_ad_id": ad["car_ad_id"]}
-                check_response = requests.get(API_URL, params=params)
+                check_response = requests.get(API_URL_DB, params=params)
                 if check_response.status_code == 200 and check_response.json():
                     log(f"Car already exists: {ad['car_ad_id']}")
                     continue
 
                 # Try to POST full car ad
-                post_response = requests.post(API_URL, json=ad)
+                post_response = requests.post(API_URL_DB, json=ad)
                 if post_response.status_code == 201:
                     log(f"✅ Saved via API: {ad['car_ad_id']}")
                 else:
@@ -327,9 +339,10 @@ def export_data_to_csv_old_use_car_object(brand="Chevrolet", model="Lacetti"):
     log(f"✅ CSV exported to: {export_path} (rows: {len(df)})")
 
 def export_data_to_csv(brand="Chevrolet", model="Lacetti"):
-    params = {"brand": brand, "model": model}
+    # Include color="white" in params and filter
+    params = {"brand": brand, "model": model, "color": "white"}
     try:
-        response = requests.get(API_URL, params=params)
+        response = requests.get(API_URL_FILTERED, params=params)
         if response.status_code == 200:
             data = response.json()
             df = pd.DataFrame(data)

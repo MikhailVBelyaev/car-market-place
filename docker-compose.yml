@@ -35,28 +35,6 @@ services:
       - ./tg_bot/.env
     restart: always
 
-  cron:
-    build:
-      context: ./backend
-    profiles: ["disabled"]
-    command: >
-      sh -c "
-      echo '🕒 Waiting for Django...';
-      until curl -s http://django:8000/ > /dev/null; do
-        sleep 2;
-      done;
-      echo '✅ Django is up';
-      while true; do
-        python run_task_lacetti_white.py;
-        sleep 3600;
-      done"
-    volumes:
-      - ./backend:/app
-      - databricks_data:/app/databricks/data
-    restart: always
-    depends_on:
-      - django
-  
   scraper:
     build:
       context: .
