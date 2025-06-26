@@ -6,7 +6,11 @@ from .serializers import CarSerializer
 
 class CarList(APIView):
     def get(self, request):
-        cars = Car.objects.all()
+        car_ad_id = request.query_params.get("car_ad_id")
+        if car_ad_id:
+            cars = Car.objects.filter(car_ad_id=car_ad_id)
+        else:
+            cars = Car.objects.all()
         serializer = CarSerializer(cars, many=True)
         return Response(serializer.data)
 

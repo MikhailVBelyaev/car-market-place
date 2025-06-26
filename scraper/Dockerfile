@@ -16,7 +16,7 @@ ENV LC_ALL=ru_RU.UTF-8
 RUN apt-get update && apt-get install -y curl
 
 # Copy scraper + Django project
-COPY ./scraper/run_task_lacetti_white.py /app/run_task_lacetti_white.py
+COPY ./scraper /app/scraper
 COPY ./backend /app/backend
 
 # Set env for Django
@@ -30,6 +30,6 @@ CMD sh -c "\
   done; \
   echo '✅ Django is up'; \
   while true; do \
-    python /app/run_task_lacetti_white.py; \
+    python /app/scraper/run_task_lacetti_white.py; \
     sleep 3600; \
   done"
