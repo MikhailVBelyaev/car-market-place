@@ -151,7 +151,7 @@ class CarFilteredList(APIView):
                     except ValueError:
                         logger.error(f"Invalid year value: {value}")
                         continue
-                elif value == 'None' and key in ['fuel_type', 'gear_type']:
+                elif value.lower() == 'none' and key in ['fuel_type', 'gear_type']:
                     filters[f'{key}__isnull'] = True
                 else:
                     filters[key] = value

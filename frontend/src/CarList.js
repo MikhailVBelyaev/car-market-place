@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
 
+// Add global CSS for <option> elements to ensure font consistency
+const globalStyles = `
+  select option {
+    font-family: 'Amazon Ember', Arial, sans-serif;
+    font-weight: 500;
+    font-size: 15px;
+  }
+`;
+
+// Inject global styles into the document
+const styleSheet = document.createElement("style");
+styleSheet.type = "text/css";
+styleSheet.innerText = globalStyles;
+document.head.appendChild(styleSheet);
+
 const API_URL = "/api/cars/filtered-list/";
 
 function CarList() {
@@ -27,13 +42,14 @@ function CarList() {
         query.append(key, filters[key]);
       }
     }
-
+    console.log(`Sending query: ${query.toString()}`); // Debug query
     fetch(`${API_URL}?${query.toString()}`)
       .then(res => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
       .then(data => {
+        console.log('Filter Config:', data.filters); // Debug filter config
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
         setCurrentPage(1);
@@ -56,12 +72,14 @@ function CarList() {
         query.append(key, updatedFilters[key]);
       }
     }
+    console.log(`Sending query for ${filterKey}: ${query.toString()}`); // Debug query
     fetch(`${API_URL}?${query.toString()}`)
       .then(res => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
       .then(data => {
+        console.log(`Filter Config for ${filterKey}:`, data.filters);
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
       })
@@ -79,12 +97,14 @@ function CarList() {
         query.append(key, updatedFilters[key]);
       }
     }
+    console.log(`Sending query for ${filterKey}: ${query.toString()}`); // Debug query
     fetch(`${API_URL}?${query.toString()}`)
       .then(res => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
       .then(data => {
+        console.log(`Filter Config for ${filterKey}:`, data.filters);
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
       })
@@ -94,7 +114,7 @@ function CarList() {
   const totalPages = Math.ceil(cars.length / rowsPerPage);
   const displayedCars = cars.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  // Styles (unchanged from original for consistency)
+  // Styles
   const sidebarStyle = {
     width: '250px',
     minWidth: '200px',
@@ -144,6 +164,20 @@ function CarList() {
     alignItems: 'center',
     gap: '12px',
     fontFamily: 'Amazon Ember, Arial, sans-serif'
+  };
+
+  // New style for select elements to match label font
+  const selectStyle = {
+    width: '100%',
+    padding: '6px',
+    boxSizing: 'border-box',
+    fontFamily: 'Amazon Ember, Arial, sans-serif',
+    fontWeight: 500,
+    fontSize: '15px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    backgroundColor: '#fff',
+    cursor: 'pointer'
   };
 
   return (
@@ -318,7 +352,9 @@ function CarList() {
                       marginBottom: '6px',
                       cursor: 'pointer',
                       fontWeight: filters[key] === option.value ? 600 : 400,
-                      color: filters[key] === option.value ? '#1a73e8' : '#000'
+                      color: filters[key] === option.value ? '#1a73e8' : '#000',
+                      fontFamily: 'Amazon Ember, Arial, sans-serif',
+                      fontSize: '15px'
                     }}
                   >
                     <input
@@ -344,18 +380,32 @@ function CarList() {
                 )}
               </div>
             ) : (
-              <select
-                value={filters[key] || ''}
-                onChange={e => handleDropdownFilterChange(key, e)}
-                style={{ width: '100%', padding: '6px', boxSizing: 'border-box' }}
-              >
-                <option value="">Select {key.replace('_', ' ')}</option>
-                {config.options.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label} ({option.count})
-                  </option>
-                ))}
-              </select>
+              <div>
+                <select
+                  value={filters[key] || ''}
+                  onChange={e => handleDropdownFilterChange(key, e)}
+                  style={selectStyle}
+                >
+                  <option value="">Select {key.replace('_', ' ')}</option>
+                  {config.options.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label} ({option.count})
+                    </option>
+                  ))}
+                </select>
+                {filters[key] && (
+                  <a
+                    href="#!"
+                    onClick={e => {
+                      e.preventDefault();
+                      handleDropdownFilterChange(key, { target: { value: '' } });
+                    }}
+                    style={{ display: 'block', marginTop: '8px', color: 'red', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Clear {key.replace('_', ' ')} filter
+                  </a>
+                )}
+              </div>
             )}
           </div>
         ))}
