@@ -191,28 +191,32 @@ function CarList() {
           zIndex: 200,
           background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
           color: '#fff',
-          padding: '0 0 0 250px',
           minHeight: '68px',
           display: 'flex',
           alignItems: 'center',
           boxShadow: '0 2px 10px 0 rgba(40,116,240,0.10)',
+          padding: '0 20px', // Adjusted padding to avoid overlap with sidebar
+          boxSizing: 'border-box'
         }}
       >
         <div style={{
           display: 'flex',
           alignItems: 'center',
           width: '100%',
+          maxWidth: '1200px', // Constrain content width
+          margin: '0 auto', // Center content
           justifyContent: 'space-between',
-          padding: '0 30px 0 0',
+          padding: '0 10px', // Reduced padding for better spacing
         }}>
           <h1 style={{
             fontFamily: 'Amazon Ember, Arial, sans-serif',
             fontWeight: 900,
             fontSize: '2.2rem',
             letterSpacing: '2px',
-            margin: 0,
+            margin: '0 20px 0 0', // Ensure logo stays left with spacing
             color: '#fff',
-            textShadow: '0 2px 8px #0057b899'
+            textShadow: '0 2px 8px #0057b899',
+            flexShrink: 0 // Prevent logo from shrinking
           }}>
             Mooods
           </h1>
@@ -222,7 +226,10 @@ function CarList() {
             background: '#fff',
             borderRadius: '30px',
             padding: '4px 10px',
-            boxShadow: '0 2px 8px 0 rgba(0,0,0,0.05)'
+            boxShadow: '0 2px 8px 0 rgba(0,0,0,0.05)',
+            flexGrow: 1, // Allow search bar to take available space
+            maxWidth: '400px', // Limit search bar width
+            minWidth: '200px' // Ensure minimum width for visibility
           }}>
             <input
               type="text"
@@ -235,24 +242,35 @@ function CarList() {
                 padding: '7px 12px',
                 borderRadius: '30px',
                 fontSize: '15px',
-                minWidth: '180px',
+                flexGrow: 1, // Input takes available space
                 background: 'transparent'
               }}
             />
             <button
               onClick={fetchCars}
               style={{
-                background: 'linear-gradient(90deg,#2874f0 0%,#0057b8 100%)',
+                background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '20px',
                 fontWeight: 700,
                 fontSize: '15px',
                 padding: '7px 22px',
-                marginLeft: '8px',
                 cursor: 'pointer',
                 boxShadow: '0 2px 6px 0 rgba(40,116,240,0.13)',
-                transition: 'background 0.2s, box-shadow 0.2s'
+                transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
+                flexShrink: 0, // Prevent button from shrinking
+                whiteSpace: 'nowrap' // Prevent text wrapping
+              }}
+              onMouseOver={e => {
+                e.currentTarget.style.background = 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)';
+                e.currentTarget.style.boxShadow = '0 4px 12px 0 rgba(40,116,240,0.25)';
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.background = 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)';
+                e.currentTarget.style.boxShadow = '0 2px 6px 0 rgba(40,116,240,0.13)';
+                e.currentTarget.style.transform = '';
               }}
             >
               Search

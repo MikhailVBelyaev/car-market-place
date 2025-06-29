@@ -29,8 +29,8 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'django']
-
+# ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'django', ".svc.cluster.local"]
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 

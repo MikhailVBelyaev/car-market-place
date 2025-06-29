@@ -1,0 +1,364 @@
+# PersistentVolumeClaim for databricks_data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: databricks-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: managed-csi
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# PersistentVolumeClaim for pg_data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: managed-csi
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Secret for environment variables
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+data:
+  POSTGRES_USER: bWFya2V0cGxhY2VfdXNlcg== # marketplace_user
+  POSTGRES_PASSWORD: bWFya2V0cGxhY2VfdXNlcg== # marketplace_user
+  DATABASE_URL: cG9zdGdyZXNxbCtwc3ljb3BnMjovL21hcmtldHBsYWNlX3VzZXI6bWFya2V0cGxhY2VfdXNlckBwb3N0Z3Jlczp8NDMyL3Bvc3RncmVz # postgresql+psycopg2://marketplace_user:marketplace_user@postgres:5432/postgres
+
+---
+# ConfigMap for nginx.conf
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  nginx.conf: |
+    server {
+      listen 80;
+      root /usr/share/nginx/html;
+      index index.html index.htm;
+
+      location / {
+        try_files $uri /index.html;
+      }
+
+      location /api/ {
+        proxy_pass http://django:8000/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+    }
+
+---
+# Deployment for Postgres
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: marketplaceacr12311231.azurecr.io/postgres:latest
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: pg-data
+          mountPath: /var/lib/postgresql/data
+        - name: initdb
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: pg-data
+        persistentVolumeClaim:
+          claimName: pg-data-pvc
+      - name: initdb
+        emptyDir: {}
+      imagePullSecrets:
+      - name: acr-secret
+
+---
+# Service for Postgres
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+
+---
+# Deployment for Django
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django
+  template:
+    metadata:
+      labels:
+        app: django
+    spec:
+      initContainers:
+      - name: migrate
+        image: marketplaceacr12311231.azurecr.io/django:latest
+        command: ["sh", "-c", "python manage.py migrate || exit 0"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DATABASE_URL
+        imagePullPolicy: Always
+      containers:
+      - name: django
+        image: marketplaceacr12311231.azurecr.io/django:latest
+        command: ["gunicorn", "--bind", "0.0.0.0:8000", "--log-level", "debug", "car_marketplace.wsgi:application"]
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: DATABASE_URL
+        - name: DEBUG
+          value: "True"
+        - name: TZ
+          value: "UTC"
+        volumeMounts:
+        - name: databricks-data
+          mountPath: /app/databricks/data
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: databricks-data
+        persistentVolumeClaim:
+          claimName: databricks-data-pvc
+      imagePullSecrets:
+      - name: acr-secret
+
+---
+# Service for Django
+apiVersion: v1
+kind: Service
+metadata:
+  name: django
+spec:
+  selector:
+    app: django
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+
+---
+# Deployment for Frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: marketplaceacr12311231.azurecr.io/frontend:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-config
+      imagePullSecrets:
+      - name: acr-secret
+
+---
+# Service for Frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+
+---
+# Deployment for tg_bot
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tg-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tg-bot
+  template:
+    metadata:
+      labels:
+        app: tg-bot
+    spec:
+      containers:
+      - name: tg-bot
+        image: marketplaceacr12311231.azurecr.io/tg_bot:latest
+      imagePullSecrets:
+      - name: acr-secret
+
+---
+# Service for tg_bot
+apiVersion: v1
+kind: Service
+metadata:
+  name: tg-bot
+spec:
+  selector:
+    app: tg-bot
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+
+---
+# Deployment for scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scraper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scraper
+  template:
+    metadata:
+      labels:
+        app: scraper
+    spec:
+      containers:
+      - name: scraper
+        image: marketplaceacr12311231.azurecr.io/scraper:latest
+        volumeMounts:
+        - name: databricks-data
+          mountPath: /app/databricks/data
+      volumes:
+      - name: databricks-data
+        persistentVolumeClaim:
+          claimName: databricks-data-pvc
+      imagePullSecrets:
+      - name: acr-secret
+
+---
+# Service for scraper
+apiVersion: v1
+kind: Service
+metadata:
+  name: scraper
+spec:
+  selector:
+    app: scraper
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+
+---
+# Ingress for External Access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+      - path: /api/
+        pathType: Prefix
+        backend:
+          service:
+            name: django
+            port:
+              number: 8000

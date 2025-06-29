@@ -2,8 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+COPY requirements.txt .
+
 # Install dependencies
-COPY ./backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 RUN apt-get update && apt-get install -y locales && \
@@ -15,13 +16,8 @@ ENV LC_ALL=ru_RU.UTF-8
 
 RUN apt-get update && apt-get install -y curl
 
-# Copy scraper + Django project
-COPY ./scraper /app/scraper
-COPY ./backend /app/backend
-
-# Set env for Django
-ENV DJANGO_SETTINGS_MODULE=car_marketplace.settings
-ENV PYTHONPATH=/app/backend
+# Copy scraper
+COPY . /app/scraper
 
 CMD sh -c "\
   echo '🕒 Waiting for Django...'; \

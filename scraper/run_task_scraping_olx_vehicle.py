@@ -40,16 +40,6 @@ def load_brands_and_models():
         log(f"❌ Failed to load brands_models.json: {e}")
         return [{"brand": "Chevrolet", "model": "Lacetti"}]
 
-if not TEST_MODE:
-    # Set up Django environment
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'backend')))
-    # sys.path.append(os.path.join(os.path.dirname(__file__), 'cars'))
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "car_marketplace.settings")
-    import django
-    django.setup()
-
-    from cars.models import Car
-
 # Locale and timezone config
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 tz_uzbekistan = timezone('Asia/Tashkent')
@@ -321,22 +311,6 @@ def save_to_db(processed_ads):
                 logging.error(f"Request failed for car {ad}: {e}")
         else:
             logging.warning(f"Skipping invalid ad: {ad}")
-
-def export_data_to_csv_old_use_car_object(brand="Chevrolet", model="Lacetti"):
-    queryset = Car.objects.filter(
-        brand=brand, model=model,
-        mileage__isnull=False, price__isnull=False, created_at__isnull=False
-    ).values("year", "mileage", "price", "created_at")
-
-    df = pd.DataFrame.from_records(queryset)
-    export_dir = '/app/databricks/data'
-    # test path for local development
-    if not os.path.exists(export_dir):
-        export_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'databricks', 'data'))
-    os.makedirs(export_dir, exist_ok=True)
-    export_path = os.path.join(export_dir, 'cars_latest.csv')
-    df.to_csv(export_path, index=False)
-    log(f"✅ CSV exported to: {export_path} (rows: {len(df)})")
 
 def export_data_to_csv(brand="Chevrolet", model="Lacetti"):
     # Include color="white" in params and filter
