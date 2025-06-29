@@ -180,3 +180,4 @@ cython_debug/
 
 .databricks
 *old*
+terraform/.terraform/providers/
