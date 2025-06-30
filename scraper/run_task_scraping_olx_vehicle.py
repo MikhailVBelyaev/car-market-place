@@ -104,6 +104,7 @@ def parse_date(date_str):
         return None
 
 def process_vehicle_data(vehicle_ads, brand, model):
+    
     processed_ads = []
     for ad in vehicle_ads:
         try:
@@ -146,11 +147,13 @@ def process_vehicle_data(vehicle_ads, brand, model):
                     params = params_div.find_all('p', class_='css-1los5bp')
                     # Inserted model check block
                     model_check_passed = True
+                    expected_model = model.lower().split()[0]
+
                     for param in params:
                         text = param.get_text(strip=True)
                         if text.startswith('Модель:'):
                             detail_model = text.split(':', 1)[-1].strip().lower()
-                            if detail_model != model.lower():
+                            if expected_model not in detail_model:
                                 log(f"⏩ Skipping ad due to model mismatch: expected '{model}', found '{detail_model}'")
                                 model_check_passed = False
                                 break

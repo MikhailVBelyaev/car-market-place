@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY scraper/requirements.txt .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
