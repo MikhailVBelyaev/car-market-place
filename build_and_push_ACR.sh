@@ -1,4 +1,3 @@
-
 #!/bin/bash
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
@@ -27,6 +26,7 @@ if [ ${#ARGS[@]} -eq 0 ]; then
   build_and_push frontend ./frontend
   build_and_push tg_bot ./tg_bot
   build_and_push scraper ./scraper
+  build_and_push extract-data ./extract_data
   build_and_push postgres ./db
 else
   for arg in "${ARGS[@]}"; do
@@ -42,6 +42,9 @@ else
         ;;
       scraper)
         build_and_push scraper ./scraper
+        ;;
+      extract-data)
+        build_and_push extract-data ./extract_data
         ;;
       postgres)
         build_and_push postgres ./db

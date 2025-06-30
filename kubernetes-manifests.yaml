@@ -336,6 +336,42 @@ spec:
   type: ClusterIP
 
 ---
+# Deployment for extract-data
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: extract-data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: extract-data
+  template:
+    metadata:
+      labels:
+        app: extract-data
+    spec:
+      containers:
+      - name: extract-data
+        image: marketplaceacr12311231.azurecr.io/extract-data:latest
+      imagePullSecrets:
+      - name: acr-secret
+
+---
+# Service for extract-data
+apiVersion: v1
+kind: Service
+metadata:
+  name: extract-data
+spec:
+  selector:
+    app: extract-data
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+
+---
 # Ingress for External Access
 apiVersion: networking.k8s.io/v1
 kind: Ingress

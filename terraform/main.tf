@@ -120,7 +120,7 @@ resource "azurerm_public_ip" "ingress_ip" {
   resource_group_name = var.aks_managed_resource_group
   location            = azurerm_resource_group.bdcc.location
   allocation_method   = "Static"
-  sku                 = "Basic"  # Basic recommended for AKS LoadBalancer IPs
+  sku                 = "Standard"
   tags = {
     region = var.BDCC_REGION
     env    = var.ENV
@@ -131,6 +131,13 @@ resource "azurerm_public_ip" "ingress_ip" {
 resource "azurerm_role_assignment" "aks_ip_attach" {
   scope                = azurerm_public_ip.ingress_ip.id
   role_definition_name = "Network Contributor"
+  principal_id         = azurerm_kubernetes_cluster.bdcc.identity[0].principal_id
+}
+
+# Grant AKS access to the storage account as Storage Blob Data Contributor
+resource "azurerm_role_assignment" "aks_to_storage_blob" {
+  scope                = azurerm_storage_account.bdcc.id  
+  role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_kubernetes_cluster.bdcc.identity[0].principal_id
 }
 
@@ -152,3 +159,4 @@ output "kube_config" {
 output "acr_name" {
   value = azurerm_container_registry.acr.name
 }
+
