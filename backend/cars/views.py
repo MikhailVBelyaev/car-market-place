@@ -7,6 +7,8 @@ from rest_framework import status
 from .models import Car
 from .serializers import CarSerializer
 import logging
+from datetime import datetime, timedelta, timezone as dt_timezone
+from django.utils import timezone
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -82,18 +84,30 @@ class CarDetail(APIView):
 
 class CarFiltersSummary(APIView):
     def get(self, request):
-        fields = ['fuel_type', 'gear_type', 'color', 'vehicle_type', 'condition', 'brand', 'model', 'year']
+        fields = ['fuel_type', 'gear_type', 'color', 'vehicle_type', 'condition', 'brand', 'model', 'year', 'created_at']
         result = {}
         for field in fields:
-            summary = (
-                Car.objects.values(field)
-                .annotate(count=Count('*'))
-                .order_by('-count')
-            )
-            result[field] = {
-                str(entry[field]) if entry[field] is not None else 'None': entry['count']
-                for entry in summary
-            }
+            if field == 'created_at':
+                summary = (
+                    Car.objects.annotate(date=TruncDate('created_at'))
+                    .values('date')
+                    .annotate(count=Count('*'))
+                    .order_by('-date')
+                )
+                result[field] = {
+                    str(entry['date']) if entry['date'] is not None else 'None': entry['count']
+                    for entry in summary
+                }
+            else:
+                summary = (
+                    Car.objects.values(field)
+                    .annotate(count=Count('*'))
+                    .order_by('-count')
+                )
+                result[field] = {
+                    str(entry[field]) if entry[field] is not None else 'None': entry['count']
+                    for entry in summary
+                }
             logger.debug(f"Summary for {field}: {result[field]}")
         return Response(result)
 
@@ -109,12 +123,15 @@ class CarFilteredList(APIView):
         summary_data = summary_response.data if hasattr(summary_response, 'data') else summary_response
         logger.debug(f"Summary data: {summary_data}")
 
-        # Define allowed filters, including price and mileage
+        # Define allowed filters, including price, mileage, and created_at
         allowed = []
         for key, value_counts in summary_data.items():
-            if len(value_counts) > 1 or key == 'year':  # Include year even if single value
+            if len(value_counts) > 1 or key in ['year', 'created_at']:
                 allowed.append(key)
         allowed.extend(['price', 'mileage'])
+
+        # Log raw query parameters for debugging
+        logger.info(f"Raw query params: {request.query_params}")
 
         # Build filters from request
         filters = {}
@@ -145,6 +162,35 @@ class CarFilteredList(APIView):
                     except ValueError:
                         logger.error(f"Invalid year range: {value}")
                         continue
+                elif key == 'created_at':
+                    logger.info(f"Received created_at raw value: '{value}'")
+                    try:
+                        # Normalize input by stripping whitespace
+                        value = value.strip()
+                        # Validate format with regex
+                        import re
+                        date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+                        range_pattern = r'^(\d{4}-\d{2}-\d{2})-(\d{4}-\d{2}-\d{2})$'
+                        range_match = re.match(range_pattern, value)
+                        if range_match:
+                            # Range filter: YYYY-MM-DD-YYYY-MM-DD
+                            start_date_str, end_date_str = range_match.groups()
+                            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').replace(tzinfo=dt_timezone.utc)
+                            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').replace(tzinfo=dt_timezone.utc, hour=23, minute=59, second=59)
+                            if start_date > end_date:
+                                raise ValueError(f"Invalid created_at range: start date {start_date_str} is after end date {end_date_str}")
+                            filters['created_at__range'] = (start_date, end_date)
+                        elif re.match(date_pattern, value):
+                            # Single date filter: YYYY-MM-DD
+                            date = datetime.strptime(value, '%Y-%m-%d').replace(tzinfo=dt_timezone.utc)
+                            filters['created_at__range'] = (date, date.replace(hour=23, minute=59, second=59))
+                            
+                        else:
+                            raise ValueError(f"Invalid created_at format: {value}")
+                        logger.info(f"Parsed created_at: {value}, Start: {filters['created_at__range'][0]}, End: {filters['created_at__range'][1]}")
+                    except ValueError as e:
+                        logger.error(f"Invalid created_at format: {value}, Error: {str(e)}")
+                        continue
                 elif key == 'year':
                     try:
                         filters['year'] = int(value)
@@ -158,6 +204,9 @@ class CarFilteredList(APIView):
 
         queryset = Car.objects.filter(**filters)
         serializer = CarShortSerializer(queryset, many=True)
+
+        # Log filtered queryset count for debugging
+        logger.info(f"Filtered queryset count: {queryset.count()}")
 
         # Build filter config for client
         filter_config = {}
@@ -187,7 +236,7 @@ class CarFilteredList(APIView):
                 for v in values.keys():
                     try:
                         y = int(v)
-                        if 1900 <= y <= 2025:  # Restrict to reasonable years
+                        if 1900 <= y <= 2025:
                             years.append(y)
                         else:
                             invalid_years.append(v)
@@ -199,50 +248,43 @@ class CarFilteredList(APIView):
                 years = sorted(years, reverse=True)
                 logger.debug(f"Processed years: {years}")
                 opts = []
-                # Individual years: 2020–2025
                 for y in range(2020, 2026):
                     opts.append({
                         "value": str(y),
                         "label": str(y),
                         "count": values.get(str(y), 0)
                     })
-                # Group 2015–2019
                 group_2015_2019 = sum([values.get(str(y), 0) for y in range(2015, 2020)])
                 opts.append({
                     "value": "2015-2019",
                     "label": "2015–2019",
                     "count": group_2015_2019
                 })
-                # Group 2010–2014
                 group_2010_2014 = sum([values.get(str(y), 0) for y in range(2010, 2015)])
                 opts.append({
                     "value": "2010-2014",
                     "label": "2010–2014",
                     "count": group_2010_2014
                 })
-                # Group 2000–2009
                 group_2000_2009 = sum([values.get(str(y), 0) for y in range(2000, 2010)])
                 opts.append({
                     "value": "2000-2009",
                     "label": "2000–2009",
                     "count": group_2000_2009
                 })
-                # Group 1990–1999
                 group_1990_1999 = sum([values.get(str(y), 0) for y in range(1990, 2000)])
                 opts.append({
                     "value": "1990-1999",
                     "label": "1990–1999",
                     "count": group_1990_1999
                 })
-                # Group 1980–1989
                 group_1980_1989 = sum([values.get(str(y), 0) for y in range(1980, 1990)])
                 opts.append({
                     "value": "1980-1989",
                     "label": "1980–1989",
                     "count": group_1980_1989
                 })
-                # Group before 1980
-                group_before_1980 = sum([values.get(str(y), 0) for y in years if y < 1980])
+                group_before_1980 = sum([values.get(str(y), 0) for y in range(1900, 1980)])
                 opts.append({
                     "value": "before-1980",
                     "label": "Before 1980",
@@ -267,6 +309,35 @@ class CarFilteredList(APIView):
                     {"value": "200000-", "label": "Over 200,000 km", "count": Car.objects.filter(mileage__gt=200000).count()}
                 ]
                 filter_config[key] = {"type": "checkbox", "options": opts}
+            elif key == "created_at":
+                #today = datetime.now(dt_timezone.utc).date()
+                today = timezone.now().date()
+                last_3_days = today - timedelta(days=3)
+                last_week = today - timedelta(days=7)
+                last_month = today - timedelta(days=30)
+                opts = [
+                    {
+                        "value": str(today),
+                        "label": "Today",
+                        "count": Car.objects.filter(created_at__date=today).count()
+                    },
+                    {
+                        "value": f"{last_3_days}-{today}",
+                        "label": "Last 3 Days",
+                        "count": Car.objects.filter(created_at__date__range=[last_3_days, today]).count()
+                    },
+                    {
+                        "value": f"{last_week}-{today}",
+                        "label": "Last Week",
+                        "count": Car.objects.filter(created_at__date__range=[last_week, today]).count()
+                    },
+                    {
+                        "value": f"{last_month}-{today}",
+                        "label": "Last Month",
+                        "count": Car.objects.filter(created_at__date__range=[last_month, today]).count()
+                    }
+                ]
+                filter_config[key] = {"type": "button", "options": opts}
             else:
                 opts = [
                     {"value": v, "label": v, "count": cnt}
