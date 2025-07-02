@@ -160,3 +160,32 @@ output "acr_name" {
   value = azurerm_container_registry.acr.name
 }
 
+provider "databricks" {
+  host                        = azurerm_databricks_workspace.bdcc.workspace_url
+  azure_workspace_resource_id = azurerm_databricks_workspace.bdcc.id
+}
+
+resource "azurerm_databricks_workspace" "bdcc" {
+  depends_on = [
+    azurerm_resource_group.bdcc
+  ]
+
+  name                = "dbw-${var.ENV}-${var.LOCATION}"
+  resource_group_name = azurerm_resource_group.bdcc.name
+  location            = azurerm_resource_group.bdcc.location
+  sku                 = "standard"
+
+  tags = {
+    region = var.BDCC_REGION
+    env    = var.ENV
+  }
+}
+
+resource "databricks_cluster" "bdcc_cluster" {
+  depends_on              = [azurerm_databricks_workspace.bdcc]
+  cluster_name            = "bdcc-cluster"
+  spark_version           = "15.4.x-scala2.12"
+  node_type_id            = "Standard_D4ds_v5"
+  autotermination_minutes = 90
+  num_workers             = 1
+}

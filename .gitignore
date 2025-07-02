@@ -181,3 +181,11 @@ cython_debug/
 .databricks
 *old*
 terraform/.terraform/providers/
+*logs*
+*lock.hcl
+airflow/logs/
+terraform/.terraform/
+terraform/tfplan
+terraform/tfplan
+terraform/.terraform/
+airflow/logs/
