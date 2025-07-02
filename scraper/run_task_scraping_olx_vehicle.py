@@ -97,7 +97,7 @@ def scrape_olx_for_vehicles(search_phrase):
 def parse_date(date_str):
     try:
         if "Сегодня" in date_str:
-            return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            return datetime.now().replace(hour=19, minute=0, second=0, microsecond=0)
         return datetime.strptime(date_str, '%d %B %Y г.')
     except ValueError:
         logging.error(f"Failed to parse date: {date_str}")

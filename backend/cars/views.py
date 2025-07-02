@@ -111,13 +111,160 @@ class CarFiltersSummary(APIView):
             logger.debug(f"Summary for {field}: {result[field]}")
         return Response(result)
 
+def build_filter_config(queryset, allowed):
+    """
+    Build filter configuration with counts based on the provided queryset.
+    """
+    filter_config = {}
+    today = timezone.now().date()
+    last_3_days = today - timedelta(days=3)
+    last_week = today - timedelta(days=7)
+    last_month = today - timedelta(days=30)
+
+    for key in allowed:
+        if key == "fuel_type":
+            values = queryset.values('fuel_type').annotate(count=Count('pk'))
+            values_dict = {entry['fuel_type'] if entry['fuel_type'] is not None else 'None': entry['count'] for entry in values}
+            opts = [
+                {"value": "Gasoline", "label": "Gasoline", "count": values_dict.get("Gasoline", 0)},
+                {"value": "Electric", "label": "Electric", "count": values_dict.get("Electric", 0)},
+                {"value": "Diesel", "label": "Diesel", "count": values_dict.get("Diesel", 0)},
+                {"value": "Hybrid", "label": "Hybrid", "count": values_dict.get("Hybrid", 0)},
+                {"value": "Gas", "label": "Gas", "count": values_dict.get("Gas", 0)},
+                {"value": "None", "label": "None", "count": values_dict.get("None", 0)}
+            ]
+            filter_config[key] = {"type": "checkbox", "options": opts}
+        elif key == "gear_type":
+            values = queryset.values('gear_type').annotate(count=Count('pk'))
+            values_dict = {entry['gear_type'] if entry['gear_type'] is not None else 'None': entry['count'] for entry in values}
+            opts = [
+                {"value": "AT", "label": "Automatic", "count": values_dict.get("AT", 0)},
+                {"value": "MT", "label": "Manual", "count": values_dict.get("MT", 0)},
+                {"value": "DSG", "label": "Dual-clutch", "count": values_dict.get("DSG", 0)},
+                {"value": "None", "label": "None", "count": values_dict.get("None", 0)}
+            ]
+            filter_config[key] = {"type": "checkbox", "options": opts}
+        elif key == "year":
+            values = queryset.values('year').annotate(count=Count('pk'))
+            values_dict = {str(entry['year']) if entry['year'] is not None else 'None': entry['count'] for entry in values}
+            years = []
+            invalid_years = []
+            for v in values_dict.keys():
+                try:
+                    y = int(v)
+                    if 1900 <= y <= 2025:
+                        years.append(y)
+                    else:
+                        invalid_years.append(v)
+                except (ValueError, TypeError):
+                    invalid_years.append(v)
+                    continue
+            if invalid_years:
+                logger.warning(f"Invalid year values found: {invalid_years}")
+            years = sorted(years, reverse=True)
+            logger.debug(f"Processed years: {years}")
+            opts = []
+            for y in range(2020, 2026):
+                opts.append({
+                    "value": str(y),
+                    "label": str(y),
+                    "count": values_dict.get(str(y), 0)
+                })
+            group_2015_2019 = sum([values_dict.get(str(y), 0) for y in range(2015, 2020)])
+            opts.append({
+                "value": "2015-2019",
+                "label": "2015–2019",
+                "count": group_2015_2019
+            })
+            group_2010_2014 = sum([values_dict.get(str(y), 0) for y in range(2010, 2015)])
+            opts.append({
+                "value": "2010-2014",
+                "label": "2010–2014",
+                "count": group_2010_2014
+            })
+            group_2000_2009 = sum([values_dict.get(str(y), 0) for y in range(2000, 2010)])
+            opts.append({
+                "value": "2000-2009",
+                "label": "2000–2009",
+                "count": group_2000_2009
+            })
+            group_1990_1999 = sum([values_dict.get(str(y), 0) for y in range(1990, 2000)])
+            opts.append({
+                "value": "1990-1999",
+                "label": "1990–1999",
+                "count": group_1990_1999
+            })
+            group_1980_1989 = sum([values_dict.get(str(y), 0) for y in range(1980, 1990)])
+            opts.append({
+                "value": "1980-1989",
+                "label": "1980–1989",
+                "count": group_1980_1989
+            })
+            group_before_1980 = sum([values_dict.get(str(y), 0) for y in range(1900, 1980)])
+            opts.append({
+                "value": "before-1980",
+                "label": "Before 1980",
+                "count": group_before_1980
+            })
+            filter_config[key] = {"type": "dropdown", "options": opts}
+        elif key == "price":
+            opts = [
+                {"value": "0-5000", "label": "Under $5,000", "count": queryset.filter(price__lte=5000).count()},
+                {"value": "5000-10000", "label": "$5,000 - $10,000", "count": queryset.filter(price__range=(5000, 10000)).count()},
+                {"value": "10000-20000", "label": "$10,000 - $20,000", "count": queryset.filter(price__range=(10000, 20000)).count()},
+                {"value": "20000-50000", "label": "$20,000 - $50,000", "count": queryset.filter(price__range=(20000, 50000)).count()},
+                {"value": "50000-", "label": "Over $50,000", "count": queryset.filter(price__gt=50000).count()}
+            ]
+            filter_config[key] = {"type": "checkbox", "options": opts}
+        elif key == "mileage":
+            opts = [
+                {"value": "0-50000", "label": "Under 50,000 km", "count": queryset.filter(mileage__lte=50000).count()},
+                {"value": "50000-100000", "label": "50,000 - 100,000 km", "count": queryset.filter(mileage__range=(50000, 100000)).count()},
+                {"value": "100000-150000", "label": "100,000 - 150,000 km", "count": queryset.filter(mileage__range=(100000, 150000)).count()},
+                {"value": "150000-200000", "label": "150,000 - 200,000 km", "count": queryset.filter(mileage__range=(150000, 200000)).count()},
+                {"value": "200000-", "label": "Over 200,000 km", "count": queryset.filter(mileage__gt=200000).count()}
+            ]
+            filter_config[key] = {"type": "checkbox", "options": opts}
+        elif key == "created_at":
+            opts = [
+                {
+                    "value": str(today),
+                    "label": "Today",
+                    "count": queryset.filter(created_at__date=today).count()
+                },
+                {
+                    "value": f"{last_3_days}-{today}",
+                    "label": "Last 3 Days",
+                    "count": queryset.filter(created_at__date__range=[last_3_days, today]).count()
+                },
+                {
+                    "value": f"{last_week}-{today}",
+                    "label": "Last Week",
+                    "count": queryset.filter(created_at__date__range=[last_week, today]).count()
+                },
+                {
+                    "value": f"{last_month}-{today}",
+                    "label": "Last Month",
+                    "count": queryset.filter(created_at__date__range=[last_month, today]).count()
+                }
+            ]
+            filter_config[key] = {"type": "button", "options": opts}
+        else:
+            values = queryset.values(key).annotate(count=Count('pk'))
+            opts = [
+                {"value": v, "label": v, "count": cnt}
+                for v, cnt in [(entry[key] if entry[key] is not None else 'None', entry['count']) for entry in values]
+            ]
+            filter_config[key] = {"type": "dropdown", "options": opts}
+    return filter_config
+
 class CarFilteredList(APIView):
     """
     Returns a filtered list of cars, with dynamic allowed filters based on /api/cars/filters-summary/.
-    Also provides filter configuration for client UI.
+    Also provides filter configuration for client UI with dynamic counts.
     """
     def get(self, request):
-        # Get filter summary
+        # Get filter summary for allowed filters
         summary_view = CarFiltersSummary()
         summary_response = summary_view.get(request)
         summary_data = summary_response.data if hasattr(summary_response, 'data') else summary_response
@@ -184,7 +331,6 @@ class CarFilteredList(APIView):
                             # Single date filter: YYYY-MM-DD
                             date = datetime.strptime(value, '%Y-%m-%d').replace(tzinfo=dt_timezone.utc)
                             filters['created_at__range'] = (date, date.replace(hour=23, minute=59, second=59))
-                            
                         else:
                             raise ValueError(f"Invalid created_at format: {value}")
                         logger.info(f"Parsed created_at: {value}, Start: {filters['created_at__range'][0]}, End: {filters['created_at__range'][1]}")
@@ -202,148 +348,15 @@ class CarFilteredList(APIView):
                 else:
                     filters[key] = value
 
+        # Apply filters to get the filtered queryset
         queryset = Car.objects.filter(**filters)
         serializer = CarShortSerializer(queryset, many=True)
 
         # Log filtered queryset count for debugging
         logger.info(f"Filtered queryset count: {queryset.count()}")
 
-        # Build filter config for client
-        filter_config = {}
-        for key in allowed:
-            values = summary_data.get(key, {})
-            if key == "fuel_type":
-                opts = [
-                    {"value": "Gasoline", "label": "Gasoline", "count": values.get("Gasoline", 0)},
-                    {"value": "Electric", "label": "Electric", "count": values.get("Electric", 0)},
-                    {"value": "Diesel", "label": "Diesel", "count": values.get("Diesel", 0)},
-                    {"value": "Hybrid", "label": "Hybrid", "count": values.get("Hybrid", 0)},
-                    {"value": "Gas", "label": "Gas", "count": values.get("Gas", 0)},
-                    {"value": "None", "label": "None", "count": values.get("None", 0)}
-                ]
-                filter_config[key] = {"type": "checkbox", "options": opts}
-            elif key == "gear_type":
-                opts = [
-                    {"value": "AT", "label": "Automatic", "count": values.get("AT", 0)},
-                    {"value": "MT", "label": "Manual", "count": values.get("MT", 0)},
-                    {"value": "DSG", "label": "Dual-clutch", "count": values.get("DSG", 0)},
-                    {"value": "None", "label": "None", "count": values.get("None", 0)}
-                ]
-                filter_config[key] = {"type": "checkbox", "options": opts}
-            elif key == "year":
-                years = []
-                invalid_years = []
-                for v in values.keys():
-                    try:
-                        y = int(v)
-                        if 1900 <= y <= 2025:
-                            years.append(y)
-                        else:
-                            invalid_years.append(v)
-                    except (ValueError, TypeError):
-                        invalid_years.append(v)
-                        continue
-                if invalid_years:
-                    logger.warning(f"Invalid year values found: {invalid_years}")
-                years = sorted(years, reverse=True)
-                logger.debug(f"Processed years: {years}")
-                opts = []
-                for y in range(2020, 2026):
-                    opts.append({
-                        "value": str(y),
-                        "label": str(y),
-                        "count": values.get(str(y), 0)
-                    })
-                group_2015_2019 = sum([values.get(str(y), 0) for y in range(2015, 2020)])
-                opts.append({
-                    "value": "2015-2019",
-                    "label": "2015–2019",
-                    "count": group_2015_2019
-                })
-                group_2010_2014 = sum([values.get(str(y), 0) for y in range(2010, 2015)])
-                opts.append({
-                    "value": "2010-2014",
-                    "label": "2010–2014",
-                    "count": group_2010_2014
-                })
-                group_2000_2009 = sum([values.get(str(y), 0) for y in range(2000, 2010)])
-                opts.append({
-                    "value": "2000-2009",
-                    "label": "2000–2009",
-                    "count": group_2000_2009
-                })
-                group_1990_1999 = sum([values.get(str(y), 0) for y in range(1990, 2000)])
-                opts.append({
-                    "value": "1990-1999",
-                    "label": "1990–1999",
-                    "count": group_1990_1999
-                })
-                group_1980_1989 = sum([values.get(str(y), 0) for y in range(1980, 1990)])
-                opts.append({
-                    "value": "1980-1989",
-                    "label": "1980–1989",
-                    "count": group_1980_1989
-                })
-                group_before_1980 = sum([values.get(str(y), 0) for y in range(1900, 1980)])
-                opts.append({
-                    "value": "before-1980",
-                    "label": "Before 1980",
-                    "count": group_before_1980
-                })
-                filter_config[key] = {"type": "dropdown", "options": opts}
-            elif key == "price":
-                opts = [
-                    {"value": "0-5000", "label": "Under $5,000", "count": Car.objects.filter(price__lte=5000).count()},
-                    {"value": "5000-10000", "label": "$5,000 - $10,000", "count": Car.objects.filter(price__range=(5000, 10000)).count()},
-                    {"value": "10000-20000", "label": "$10,000 - $20,000", "count": Car.objects.filter(price__range=(10000, 20000)).count()},
-                    {"value": "20000-50000", "label": "$20,000 - $50,000", "count": Car.objects.filter(price__range=(20000, 50000)).count()},
-                    {"value": "50000-", "label": "Over $50,000", "count": Car.objects.filter(price__gt=50000).count()}
-                ]
-                filter_config[key] = {"type": "checkbox", "options": opts}
-            elif key == "mileage":
-                opts = [
-                    {"value": "0-50000", "label": "Under 50,000 km", "count": Car.objects.filter(mileage__lte=50000).count()},
-                    {"value": "50000-100000", "label": "50,000 - 100,000 km", "count": Car.objects.filter(mileage__range=(50000, 100000)).count()},
-                    {"value": "100000-150000", "label": "100,000 - 150,000 km", "count": Car.objects.filter(mileage__range=(100000, 150000)).count()},
-                    {"value": "150000-200000", "label": "150,000 - 200,000 km", "count": Car.objects.filter(mileage__range=(150000, 200000)).count()},
-                    {"value": "200000-", "label": "Over 200,000 km", "count": Car.objects.filter(mileage__gt=200000).count()}
-                ]
-                filter_config[key] = {"type": "checkbox", "options": opts}
-            elif key == "created_at":
-                #today = datetime.now(dt_timezone.utc).date()
-                today = timezone.now().date()
-                last_3_days = today - timedelta(days=3)
-                last_week = today - timedelta(days=7)
-                last_month = today - timedelta(days=30)
-                opts = [
-                    {
-                        "value": str(today),
-                        "label": "Today",
-                        "count": Car.objects.filter(created_at__date=today).count()
-                    },
-                    {
-                        "value": f"{last_3_days}-{today}",
-                        "label": "Last 3 Days",
-                        "count": Car.objects.filter(created_at__date__range=[last_3_days, today]).count()
-                    },
-                    {
-                        "value": f"{last_week}-{today}",
-                        "label": "Last Week",
-                        "count": Car.objects.filter(created_at__date__range=[last_week, today]).count()
-                    },
-                    {
-                        "value": f"{last_month}-{today}",
-                        "label": "Last Month",
-                        "count": Car.objects.filter(created_at__date__range=[last_month, today]).count()
-                    }
-                ]
-                filter_config[key] = {"type": "button", "options": opts}
-            else:
-                opts = [
-                    {"value": v, "label": v, "count": cnt}
-                    for v, cnt in values.items()
-                ]
-                filter_config[key] = {"type": "dropdown", "options": opts}
+        # Build filter config with dynamic counts based on filtered queryset
+        filter_config = build_filter_config(queryset, allowed)
 
         return Response({
             "results": serializer.data,
