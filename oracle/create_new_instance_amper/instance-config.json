@@ -1,0 +1,24 @@
+{
+  "compartmentId": "ocid1.tenancy.oc1..aaaaaaaajeyct7efelj4bhwom5pnee4one3mtbjbrmdm7tqpfhfi56mz2eya",
+  "availabilityDomain": "zBpp:US-ASHBURN-AD-1",
+  "shape": "VM.Standard.A1.Flex",
+  "displayName": "ampere-auto",
+  "sourceDetails": {
+    "sourceType": "image",
+    "imageId": "ocid1.image.oc1.iad.aaaaaaaayh2t6irbplharxvcfcpzopxl5ojk3gm3jtthnonhvd4pupliie5a",
+    "bootVolumeSizeInGBs": 50
+  },
+  "shapeConfig": {
+    "ocpus": 1.0,
+    "memoryInGBs": 6.0
+  },
+  "createVnicDetails": {
+    "subnetId": "ocid1.subnet.oc1.iad.aaaaaaaas52hzdvziti5oegymjbzezlu5sccevo5kuf5jvmyn4w4yhzpsbwa",
+    "assignPublicIp": true,
+    "displayName": "vnic-ampere-auto"
+  },
+  "metadata": {
+    "ssh_authorized_keys": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDCnc9Wis+MPG/Psml/bZl5xFiWhWWFqLvPu/MvPkwmYJa2BX52Gvgo6hpiPplXbsnW/6N6CEjNdkUYgKyj6ei9DnwQa4KcerUUSScGxq6mR7PfoiwCuX9UAise9SVIDoaYTEoRMyloBXKskGMLU3RgWSgmklR4jC8jxbMrDjSgsH835yXQHYSxlu8kFSvEH/5RcRbkGNM/fJYFB3fRN6gPabkVuFwDEhk/stEHKKqSYNj+g9EYkj5oKh0gR3Du48ZULzSdP5R7f84ud+ipPdsGkXfvj82P+2QedTxyBUpp0rD5Adaq8Lfs9oBqHulCoIWNo2hDl314nIO0nhx0CtdpenyGoDiqXqDLHoeJQ6pVeiFs7rkxXULaI5/IDSATKyk/JKs7/mf+BI6EX8VmxSjPY6CShz7JW1wuXU9dayg+yNlk6xz9ujuEdQxUO7udZium85gn613242dF2xDhXiuesyd7AI+csfjS/TLCRnVMyOzgca4KugswwSMGh2smyqk= belyaevmikhail@Belyaevs-MacBook-Air.local"
+  },
+  "isPvEncryptionInTransitEnabled": true
+}
