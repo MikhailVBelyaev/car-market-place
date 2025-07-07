@@ -189,3 +189,4 @@ terraform/tfplan
 terraform/tfplan
 terraform/.terraform/
 airflow/logs/
+*.tar
