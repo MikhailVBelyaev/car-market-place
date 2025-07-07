@@ -22,7 +22,7 @@ resource "azurerm_resource_group" "bdcc" {
   location = var.LOCATION
 
   lifecycle {
-    prevent_destroy = true
+    # prevent_destroy = true
   }
 
   tags = {
@@ -48,7 +48,7 @@ resource "azurerm_storage_account" "bdcc" {
   }
 
   lifecycle {
-    prevent_destroy = true
+    # prevent_destroy = true
   }
 
   tags = {
