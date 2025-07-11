@@ -1,6 +1,6 @@
 {
   "compartmentId": "ocid1.tenancy.oc1..aaaaaaaajeyct7efelj4bhwom5pnee4one3mtbjbrmdm7tqpfhfi56mz2eya",
-  "availabilityDomain": "zBpp:US-ASHBURN-AD-2",
+  "availabilityDomain": "zBpp:US-ASHBURN-AD-3",
   "shape": "VM.Standard.A1.Flex",
   "displayName": "ampere-auto",
   "sourceDetails": {
