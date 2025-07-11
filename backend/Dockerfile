@@ -17,8 +17,8 @@ ENV LC_ALL=ru_RU.UTF-8
 RUN pip install --no-cache-dir -r requirements.txt
 COPY car_marketplace/ car_marketplace/
 COPY cars/ cars/
-# COPY run_task_lacetti_white.py .
 
+COPY dump_cars.json /app/dump_cars.json
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
