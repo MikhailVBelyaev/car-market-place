@@ -190,3 +190,7 @@ terraform/tfplan
 terraform/.terraform/
 airflow/logs/
 *.tar
+
+terraform_gcp/.terraform/
+*.tfstate
+

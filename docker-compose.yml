@@ -129,6 +129,15 @@ services:
       - django
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/conf.d/nginx.conf:ro
+  
+  ml_api:
+    build:
+      context: ./ml_api
+    ports:
+      - "8500:8500"
+    volumes:
+      - ./databricks/models:/app/models
+    restart: always
       
 volumes:
   databricks_data:
