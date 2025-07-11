@@ -8,6 +8,7 @@
 import os
 import logging
 import requests
+import json
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
@@ -79,31 +80,54 @@ async def get_mileage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["mileage"] = mileage
         logger.info(f"User {update.effective_chat.id} entered mileage: {mileage}")
 
-        payload = {
-            "inputs": [
-                {"year": context.user_data["year"], "mileage": mileage}
-            ]
-        }
-        headers = {
-            "Authorization": f"Bearer {DATABRICKS_TOKEN}",
-            "Content-Type": "application/json"
-        }
+        # Call local ml_api instead of Databricks
+        try:
+            alt_payload = {
+                "year": context.user_data["year"],
+                "mileage": mileage
+            }
+            alt_response = requests.post("http://ml_api:8500/predict", headers={"Content-Type": "application/json"}, data=json.dumps(alt_payload))
 
-        logger.debug(f"Sending request to Databricks: {payload}")
-        response = requests.post(DATABRICKS_URL, json=payload, headers=headers)
+            if alt_response.status_code == 200:
+                alt_prediction = alt_response.json().get("predicted_price")
+                alt_rounded_price = round(alt_prediction, -2)
+                logger.info(f"[ml_api] Predicted price: {alt_rounded_price} for user {update.effective_chat.id}")
 
-        if response.status_code == 200:
-            prediction = response.json()["predictions"][0]
-            rounded_price = round(prediction, -2)
-            logger.info(f"Predicted price: {rounded_price} for user {update.effective_chat.id}")
+                await update.message.reply_text(
+                    f"💰 [Local API] Predicted price: {int(alt_rounded_price)} USD\n\nYou can type /start to make a new prediction.",
+                    reply_markup=ReplyKeyboardMarkup([['/start', '/cancel']], resize_keyboard=True)
+                )
+                return ConversationHandler.END
+            else:
+                logger.warning(f"[ml_api] Error from local service: {alt_response.text}")
+        except Exception as e:
+            logger.error(f"[ml_api] Exception calling local service: {e}")
 
-            await update.message.reply_text(
-                f"💰 Predicted price: {int(rounded_price)} USD\n\nYou can type /start to make a new prediction.",
-                reply_markup=ReplyKeyboardMarkup([['/start', '/cancel']], resize_keyboard=True)
-            )
-        else:
-            logger.error(f"Databricks error: {response.text}")
-            await update.message.reply_text("⚠️ Model error or still starting. Try again soon.")
+        # payload = {
+        #     "inputs": [
+        #         {"year": context.user_data["year"], "mileage": mileage}
+        #     ]
+        # }
+        # headers = {
+        #     "Authorization": f"Bearer {DATABRICKS_TOKEN}",
+        #     "Content-Type": "application/json"
+        # }
+        #
+        # logger.debug(f"Sending request to Databricks: {payload}")
+        # response = requests.post(DATABRICKS_URL, json=payload, headers=headers)
+        #
+        # if response.status_code == 200:
+        #     prediction = response.json()["predictions"][0]
+        #     rounded_price = round(prediction, -2)
+        #     logger.info(f"Predicted price: {rounded_price} for user {update.effective_chat.id}")
+        #
+        #     await update.message.reply_text(
+        #         f"💰 Predicted price: {int(rounded_price)} USD\n\nYou can type /start to make a new prediction.",
+        #         reply_markup=ReplyKeyboardMarkup([['/start', '/cancel']], resize_keyboard=True)
+        #     )
+        # else:
+        #     logger.error(f"Databricks error: {response.text}")
+        #     await update.message.reply_text("⚠️ Model error or still starting. Try again soon.")
         logger.debug(f"ConversationHandler.END for user {update.effective_chat.id}")
         return ConversationHandler.END
     except ValueError:
