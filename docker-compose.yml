@@ -91,6 +91,9 @@ services:
       - esdata:/usr/share/elasticsearch/data
 
   airflow-webserver:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     image: apache/airflow:2.9.1
     restart: always
     command: webserver
@@ -104,10 +107,14 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/ssh:/keys:ro
     depends_on:
       - postgres
 
   airflow-scheduler:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     image: apache/airflow:2.9.1
     restart: always
     command: scheduler
@@ -116,6 +123,7 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/ssh:/keys:ro
     depends_on:
       - postgres
 
