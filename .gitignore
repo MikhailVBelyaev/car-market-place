@@ -194,3 +194,4 @@ airflow/logs/
 terraform_gcp/.terraform/
 *.tfstate
 
+oracle/create_new_instance_amper/instance-config.json
