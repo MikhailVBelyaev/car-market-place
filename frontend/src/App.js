@@ -1,13 +1,9 @@
 import React from 'react';
-import CarList from './CarList';
+import MainSite from './MainSite';
+import './App.css';
 
 function App() {
-  return (
-    <div>
-      <h1>Car Marketplace</h1>
-      <CarList />
-    </div>
-  );
+  return <MainSite />;
 }
 
 export default App;

@@ -36,3 +36,9 @@
     transform: rotate(360deg);
   }
 }
+
+select option {
+  font-family: 'Amazon Ember', Arial, sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+}

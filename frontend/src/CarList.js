@@ -1,23 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-// Add global CSS for <option> elements to ensure font consistency
-const globalStyles = `
-  select option {
-    font-family: 'Amazon Ember', Arial, sans-serif;
-    font-weight: 500;
-    font-size: 15px;
-  }
-`;
+const API_URL = '/api/cars/filtered-list/';
 
-// Inject global styles into the document
-const styleSheet = document.createElement("style");
-styleSheet.type = "text/css";
-styleSheet.innerText = globalStyles;
-document.head.appendChild(styleSheet);
-
-const API_URL = "/api/cars/filtered-list/";
-
-function CarList() {
+const CarList = () => {
   const [cars, setCars] = useState([]);
   const [filterConfig, setFilterConfig] = useState({});
   const [filters, setFilters] = useState({
@@ -31,148 +16,134 @@ function CarList() {
     year: '',
     price: '',
     mileage: '',
-    created_at: ''
+    created_at: '',
   });
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
 
-  // Helper function to get date strings for filtering
   const getDateFilter = (type) => {
     const today = new Date();
-    // Convert to UTC by adjusting to UTC time
     const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const yyyy = todayUTC.getUTCFullYear();
     const mm = String(todayUTC.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(todayUTC.getUTCDate()).padStart(2, '0');
     const todayStr = `${yyyy}-${mm}-${dd}`;
 
-    if (type === 'today') {
-      return todayStr;
-    } else if (type === 'last3days') {
+    if (type === 'today') return todayStr;
+    if (type === 'last3days') {
       const last3Days = new Date(todayUTC);
       last3Days.setUTCDate(todayUTC.getUTCDate() - 3);
-      const last3DaysStr = `${last3Days.getUTCFullYear()}-${String(last3Days.getUTCMonth() + 1).padStart(2, '0')}-${String(last3Days.getUTCDate()).padStart(2, '0')}`;
-      return `${last3DaysStr}-${todayStr}`;
-    } else if (type === 'lastweek') {
+      return `${last3Days.getUTCFullYear()}-${String(last3Days.getUTCMonth() + 1).padStart(2, '0')}-${String(last3Days.getUTCDate()).padStart(2, '0')}-${todayStr}`;
+    }
+    if (type === 'lastweek') {
       const lastWeek = new Date(todayUTC);
       lastWeek.setUTCDate(todayUTC.getUTCDate() - 7);
-      const lastWeekStr = `${lastWeek.getUTCFullYear()}-${String(lastWeek.getUTCMonth() + 1).padStart(2, '0')}-${String(lastWeek.getUTCDate()).padStart(2, '0')}`;
-      return `${lastWeekStr}-${todayStr}`;
-    } else if (type === 'lastmonth') {
+      return `${lastWeek.getUTCFullYear()}-${String(lastWeek.getUTCMonth() + 1).padStart(2, '0')}-${String(lastWeek.getUTCDate()).padStart(2, '0')}-${todayStr}`;
+    }
+    if (type === 'lastmonth') {
       const lastMonth = new Date(todayUTC);
       lastMonth.setUTCDate(todayUTC.getUTCDate() - 30);
-      const lastMonthStr = `${lastMonth.getUTCFullYear()}-${String(lastMonth.getUTCMonth() + 1).padStart(2, '0')}-${String(lastMonth.getUTCDate()).padStart(2, '0')}`;
-      return `${lastMonthStr}-${todayStr}`;
-    } else {
-      return '';
+      return `${lastMonth.getUTCFullYear()}-${String(lastMonth.getUTCMonth() + 1).padStart(2, '0')}-${String(lastMonth.getUTCDate()).padStart(2, '0')}-${todayStr}`;
     }
+    return '';
   };
 
   const fetchCars = () => {
     const query = new URLSearchParams();
     for (const key in filters) {
-      if (filters[key]) {
-        query.append(key, filters[key]);
-      }
+      if (filters[key]) query.append(key, filters[key]);
     }
-    console.log(`Sending query: ${query.toString()}`); // Debug query
+    console.log(`Sending query: ${query.toString()}`);
     fetch(`${API_URL}?${query.toString()}`)
-      .then(res => {
+      .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
-      .then(data => {
-        console.log('Filter Config:', data.filters); // Debug filter config
+      .then((data) => {
+        console.log('Filter Config:', data.filters);
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
         setCurrentPage(1);
       })
-      .catch(err => console.error('Error fetching cars:', err));
+      .catch((err) => console.error('Error fetching cars:', err));
   };
 
   useEffect(() => {
-    fetchCars(); // Initial load
+    fetchCars();
   }, []);
 
   const handleCheckboxFilterClick = (filterKey, value) => {
     const newValue = filters[filterKey] === value ? '' : value;
-    setFilters(prevFilters => ({ ...prevFilters, [filterKey]: newValue }));
+    setFilters((prevFilters) => ({ ...prevFilters, [filterKey]: newValue }));
     setCurrentPage(1);
     const updatedFilters = { ...filters, [filterKey]: newValue };
     const query = new URLSearchParams();
     for (const key in updatedFilters) {
-      if (updatedFilters[key]) {
-        query.append(key, updatedFilters[key]);
-      }
+      if (updatedFilters[key]) query.append(key, updatedFilters[key]);
     }
-    console.log(`Sending query for ${filterKey}: ${query.toString()}`); // Debug query
+    console.log(`Sending query for ${filterKey}: ${query.toString()}`);
     fetch(`${API_URL}?${query.toString()}`)
-      .then(res => {
+      .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
-      .then(data => {
+      .then((data) => {
         console.log(`Filter Config for ${filterKey}:`, data.filters);
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
       })
-      .catch(err => console.error(`Error fetching ${filterKey}:`, err));
+      .catch((err) => console.error(`Error fetching ${filterKey}:`, err));
   };
 
   const handleDropdownFilterChange = (filterKey, e) => {
     const value = e.target.value;
-    setFilters(prevFilters => ({ ...prevFilters, [filterKey]: value }));
+    setFilters((prevFilters) => ({ ...prevFilters, [filterKey]: value }));
     setCurrentPage(1);
     const updatedFilters = { ...filters, [filterKey]: value };
     const query = new URLSearchParams();
     for (const key in updatedFilters) {
-      if (updatedFilters[key]) {
-        query.append(key, updatedFilters[key]);
-      }
+      if (updatedFilters[key]) query.append(key, updatedFilters[key]);
     }
-    console.log(`Sending query for ${filterKey}: ${query.toString()}`); // Debug query
+    console.log(`Sending query for ${filterKey}: ${query.toString()}`);
     fetch(`${API_URL}?${query.toString()}`)
-      .then(res => {
+      .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
-      .then(data => {
+      .then((data) => {
         console.log(`Filter Config for ${filterKey}:`, data.filters);
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
       })
-      .catch(err => console.error(`Error fetching ${filterKey}:`, err));
+      .catch((err) => console.error(`Error fetching ${filterKey}:`, err));
   };
 
   const handleDateFilterClick = (type) => {
     const dateValue = getDateFilter(type);
-    setFilters(prevFilters => ({ ...prevFilters, created_at: dateValue }));
+    setFilters((prevFilters) => ({ ...prevFilters, created_at: dateValue }));
     setCurrentPage(1);
     const updatedFilters = { ...filters, created_at: dateValue };
     const query = new URLSearchParams();
     for (const key in updatedFilters) {
-      if (updatedFilters[key]) {
-        query.append(key, updatedFilters[key]);
-      }
+      if (updatedFilters[key]) query.append(key, updatedFilters[key]);
     }
-    console.log(`Sending query for created_at: ${query.toString()}`); // Debug query
+    console.log(`Sending query for created_at: ${query.toString()}`);
     fetch(`${API_URL}?${query.toString()}`)
-      .then(res => {
+      .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
-      .then(data => {
+      .then((data) => {
         console.log(`Filter Config for created_at:`, data.filters);
         setCars(data.results || []);
         setFilterConfig(data.filters || {});
       })
-      .catch(err => console.error(`Error fetching created_at:`, err));
+      .catch((err) => console.error(`Error fetching created_at:`, err));
   };
 
   const totalPages = Math.ceil(cars.length / rowsPerPage);
   const displayedCars = cars.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
-  // Styles
   const sidebarStyle = {
     width: '250px',
     minWidth: '200px',
@@ -183,7 +154,7 @@ function CarList() {
     position: 'fixed',
     overflowY: 'auto',
     backgroundColor: '#f9f9f9',
-    top: '0',
+    top: '120px',
     left: '0',
     zIndex: 100,
   };
@@ -204,7 +175,7 @@ function CarList() {
     borderRadius: '16px',
     overflow: 'hidden',
     boxShadow: '0 2px 16px 0 rgba(40,116,240,0.07)',
-    margin: '0 0 20px 0'
+    margin: '0 0 20px 0',
   };
 
   const thTdStyle = {
@@ -212,7 +183,7 @@ function CarList() {
     padding: '14px 12px',
     textAlign: 'left',
     fontSize: '16px',
-    fontFamily: 'Amazon Ember, Arial, sans-serif'
+    fontFamily: 'Amazon Ember, Arial, sans-serif',
   };
 
   const paginationStyle = {
@@ -221,7 +192,7 @@ function CarList() {
     justifyContent: 'center',
     alignItems: 'center',
     gap: '12px',
-    fontFamily: 'Amazon Ember, Arial, sans-serif'
+    fontFamily: 'Amazon Ember, Arial, sans-serif',
   };
 
   const selectStyle = {
@@ -234,7 +205,7 @@ function CarList() {
     borderRadius: '4px',
     border: '1px solid #ccc',
     backgroundColor: '#fff',
-    cursor: 'pointer'
+    cursor: 'pointer',
   };
 
   const dateFilterButtonStyle = {
@@ -250,13 +221,13 @@ function CarList() {
     letterSpacing: '0.5px',
     transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
     marginRight: '8px',
-    marginBottom: '8px'
+    marginBottom: '8px',
   };
 
   const dateFilterButtonHoverStyle = {
     background: 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)',
     boxShadow: '0 4px 16px 0 rgba(40,116,240,0.25)',
-    transform: 'translateY(-2px) scale(1.03)'
+    transform: 'translateY(-2px) scale(1.03)',
   };
 
   const cleanButtonStyle = {
@@ -272,141 +243,30 @@ function CarList() {
     boxShadow: '0 2px 6px 0 rgba(255,90,54,0.13)',
     transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
     marginRight: '8px',
-    marginBottom: '8px'
+    marginBottom: '8px',
   };
 
   const cleanButtonHoverStyle = {
     background: 'linear-gradient(90deg, #c62828 0%, #ff5a36 100%)',
     boxShadow: '0 4px 16px 0 rgba(255,90,54,0.22)',
-    transform: 'translateY(-2px) scale(1.03)'
+    transform: 'translateY(-2px) scale(1.03)',
   };
 
   return (
-    <>
-      <header
-        style={{
-          width: '100%',
-          position: 'fixed',
-          left: 0,
-          top: 0,
-          zIndex: 200,
-          background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
-          color: '#fff',
-          minHeight: '68px',
-          display: 'flex',
-          alignItems: 'center',
-          boxShadow: '0 2px 10px 0 rgba(40,116,240,0.10)',
-          padding: '0 20px',
-          boxSizing: 'border-box'
-        }}
-      >
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          width: '100%',
-          maxWidth: '1200px',
-          margin: '0 auto',
-          justifyContent: 'space-between',
-          padding: '0 10px',
-        }}>
-          <h1 style={{
-            fontFamily: 'Amazon Ember, Arial, sans-serif',
-            fontWeight: 900,
-            fontSize: '2.2rem',
-            letterSpacing: '2px',
-            margin: '0 20px 0 0',
-            color: '#fff',
-            textShadow: '0 2px 8px #0057b899',
-            flexShrink: 0
-          }}>
-            Mooods
-          </h1>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: '#fff',
-            borderRadius: '30px',
-            padding: '4px 10px',
-            boxShadow: '0 2px 8px 0 rgba(0,0,0,0.05)',
-            flexGrow: 1,
-            maxWidth: '400px',
-            minWidth: '200px'
-          }}>
-            <input
-              type="text"
-              placeholder="Search description, location, model..."
-              value={filters.model}
-              onChange={e => setFilters(prev => ({ ...prev, model: e.target.value }))}
-              style={{
-                border: 'none',
-                outline: 'none',
-                padding: '7px 12px',
-                borderRadius: '30px',
-                fontSize: '15px',
-                flexGrow: 1,
-                background: 'transparent'
-              }}
-            />
-            <button
-              onClick={fetchCars}
-              style={{
-                background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '20px',
-                fontWeight: 700,
-                fontSize: '15px',
-                padding: '7px 22px',
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px 0 rgba(40,116,240,0.13)',
-                transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
-                flexShrink: 0,
-                whiteSpace: 'nowrap'
-              }}
-              onMouseOver={e => {
-                e.currentTarget.style.background = 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)';
-                e.currentTarget.style.boxShadow = '0 4px 12px 0 rgba(40,116,240,0.25)';
-                e.currentTarget.style.transform = 'scale(1.05)';
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.background = 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)';
-                e.currentTarget.style.boxShadow = '0 2px 6px 0 rgba(40,116,240,0.13)';
-                e.currentTarget.style.transform = '';
-              }}
-            >
-              Search
-            </button>
-          </div>
-        </div>
-      </header>
+    <div>
       <aside style={sidebarStyle}>
-        <h2 style={{ fontFamily: 'Amazon Ember, Arial, sans-serif', fontWeight: 800, fontSize: '1.3rem', marginTop: '10px' }}>Filters</h2>
+        <h2 style={{ fontFamily: 'Amazon Ember, Arial, sans-serif', fontWeight: 800, fontSize: '1.3rem', marginTop: '10px' }}>
+          Filters
+        </h2>
         <div style={{ display: 'flex', gap: '12px', marginBottom: '22px', alignItems: 'center' }}>
           <button
             onClick={fetchCars}
             style={{
-              padding: '10px 20px',
-              cursor: 'pointer',
-              fontWeight: 600,
-              background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '20px',
-              boxShadow: '0 2px 6px 0 rgba(40,116,240,0.15)',
+              ...dateFilterButtonStyle,
               fontSize: '16px',
-              letterSpacing: '0.5px',
-              transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
             }}
-            onMouseOver={e => {
-              e.currentTarget.style.background = 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)';
-              e.currentTarget.style.boxShadow = '0 4px 16px 0 rgba(40,116,240,0.25)';
-              e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
-            }}
-            onMouseOut={e => {
-              e.currentTarget.style.background = 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)';
-              e.currentTarget.style.boxShadow = '0 2px 6px 0 rgba(40,116,240,0.15)';
-              e.currentTarget.style.transform = '';
-            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle)}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, dateFilterButtonStyle)}
           >
             Show
           </button>
@@ -423,47 +283,37 @@ function CarList() {
                 year: '',
                 price: '',
                 mileage: '',
-                created_at: ''
+                created_at: '',
               });
               setCurrentPage(1);
               setTimeout(fetchCars, 0);
             }}
             style={{
-              padding: '10px 20px',
-              cursor: 'pointer',
-              background: 'linear-gradient(90deg, #ff5a36 0%, #c62828 100%)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '20px',
-              fontWeight: 600,
+              ...cleanButtonStyle,
               fontSize: '16px',
-              letterSpacing: '0.5px',
-              boxShadow: '0 2px 6px 0 rgba(255,90,54,0.13)',
-              transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
             }}
-            onMouseOver={e => {
-              e.currentTarget.style.background = 'linear-gradient(90deg, #c62828 0%, #ff5a36 100%)';
-              e.currentTarget.style.boxShadow = '0 4px 16px 0 rgba(255,90,54,0.22)';
-              e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
-            }}
-            onMouseOut={e => {
-              e.currentTarget.style.background = 'linear-gradient(90deg, #ff5a36 0%, #c62828 100%)';
-              e.currentTarget.style.boxShadow = '0 2px 6px 0 rgba(255,90,54,0.13)';
-              e.currentTarget.style.transform = '';
-            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, cleanButtonHoverStyle)}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, cleanButtonStyle)}
           >
             Clear All Filters
           </button>
         </div>
-        {/* Dynamic Filters from Backend */}
         {Object.entries(filterConfig).map(([key, config]) => (
           <div key={key} style={{ marginBottom: '24px' }}>
-            <label style={{ textTransform: 'capitalize', display: 'block', marginBottom: '4px', fontWeight: 500, fontSize: '15px' }}>
+            <label
+              style={{
+                textTransform: 'capitalize',
+                display: 'block',
+                marginBottom: '4px',
+                fontWeight: 500,
+                fontSize: '15px',
+              }}
+            >
               {key.replace('_', ' ')}:
             </label>
             {config.type === 'checkbox' ? (
               <div>
-                {config.options.map(option => (
+                {config.options.map((option) => (
                   <label
                     key={option.value}
                     style={{
@@ -474,7 +324,7 @@ function CarList() {
                       fontWeight: filters[key] === option.value ? 600 : 400,
                       color: filters[key] === option.value ? '#1a73e8' : '#000',
                       fontFamily: 'Amazon Ember, Arial, sans-serif',
-                      fontSize: '15px'
+                      fontSize: '15px',
                     }}
                   >
                     <input
@@ -489,7 +339,7 @@ function CarList() {
                 {filters[key] && (
                   <a
                     href="#!"
-                    onClick={e => {
+                    onClick={(e) => {
                       e.preventDefault();
                       handleCheckboxFilterClick(key, '');
                     }}
@@ -503,11 +353,11 @@ function CarList() {
               <div>
                 <select
                   value={filters[key] || ''}
-                  onChange={e => handleDropdownFilterChange(key, e)}
+                  onChange={(e) => handleDropdownFilterChange(key, e)}
                   style={selectStyle}
                 >
                   <option value="">Select {key.replace('_', ' ')}</option>
-                  {config.options.map(option => (
+                  {config.options.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label} ({option.count})
                     </option>
@@ -516,7 +366,7 @@ function CarList() {
                 {filters[key] && (
                   <a
                     href="#!"
-                    onClick={e => {
+                    onClick={(e) => {
                       e.preventDefault();
                       handleDropdownFilterChange(key, { target: { value: '' } });
                     }}
@@ -531,210 +381,227 @@ function CarList() {
         ))}
       </aside>
       <main style={containerStyle}>
-        <div style={{ paddingTop: '85px', maxWidth: '1200px', margin: '0 auto' }}>
-          <h2 style={{
+        <h2
+          style={{
             fontFamily: 'Amazon Ember, Arial, sans-serif',
             fontWeight: 700,
             fontSize: '1.5rem',
             marginBottom: '15px',
-            color: '#222'
-          }}>
-            Car List
-          </h2>
-          <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            <button
-              onClick={() => handleDateFilterClick('today')}
-              style={{
-                ...dateFilterButtonStyle,
-                background: filters.created_at === getDateFilter('today') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background
-              }}
-              onMouseOver={e => {
-                Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle);
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.background = filters.created_at === getDateFilter('today') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background;
-                e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
-                e.currentTarget.style.transform = '';
-              }}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => handleDateFilterClick('last3days')}
-              style={{
-                ...dateFilterButtonStyle,
-                background: filters.created_at === getDateFilter('last3days') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background
-              }}
-              onMouseOver={e => {
-                Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle);
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.background = filters.created_at === getDateFilter('last3days') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background;
-                e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
-                e.currentTarget.style.transform = '';
-              }}
-            >
-              Last 3 Days
-            </button>
-            <button
-              onClick={() => handleDateFilterClick('lastweek')}
-              style={{
-                ...dateFilterButtonStyle,
-                background: filters.created_at === getDateFilter('lastweek') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background
-              }}
-              onMouseOver={e => {
-                Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle);
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.background = filters.created_at === getDateFilter('lastweek') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background;
-                e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
-                e.currentTarget.style.transform = '';
-              }}
-            >
-              Last Week
-            </button>
-            <button
-              onClick={() => handleDateFilterClick('lastmonth')}
-              style={{
-                ...dateFilterButtonStyle,
-                background: filters.created_at === getDateFilter('lastmonth') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background
-              }}
-              onMouseOver={e => {
-                Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle);
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.background = filters.created_at === getDateFilter('lastmonth') ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)' : dateFilterButtonStyle.background;
-                e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
-                e.currentTarget.style.transform = '';
-              }}
-            >
-              Last Month
-            </button>
-            <button
-              onClick={() => handleDateFilterClick('clean')}
-              style={cleanButtonStyle}
-              onMouseOver={e => {
-                Object.assign(e.currentTarget.style, cleanButtonHoverStyle);
-              }}
-              onMouseOut={e => {
-                Object.assign(e.currentTarget.style, cleanButtonStyle);
-              }}
-            >
-              Clean
-            </button>
-          </div>
-          {cars.length === 0 ? (
-            <p style={{ fontFamily: 'Amazon Ember, Arial, sans-serif', color: '#555', fontSize: '1.15rem' }}>No cars available.</p>
-          ) : (
-            <>
-              <div style={{ overflowX: 'auto', borderRadius: '16px', boxShadow: '0 2px 16px 0 rgba(40,116,240,0.07)' }}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr style={{ background: '#f6f7fa' }}>
-                      <th style={thTdStyle}>Description</th>
-                      <th style={thTdStyle}>Year</th>
-                      <th style={thTdStyle}>Location</th>
-                      <th style={thTdStyle}>Mileage (km)</th>
-                      <th style={thTdStyle}>Price (USD)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayedCars.map((car, idx) => (
-                      <tr key={idx} style={{
-                        background: idx % 2 === 0 ? '#fff' : '#f6f7fa',
-                        transition: 'background 0.2s'
-                      }}>
-                        <td style={thTdStyle}>{car.description}</td>
-                        <td style={thTdStyle}>{car.year}</td>
-                        <td style={thTdStyle}>{car.location}</td>
-                        <td style={thTdStyle}>{car.mileage}</td>
-                        <td style={thTdStyle}>{car.price}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={paginationStyle}>
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                  disabled={currentPage === 1}
-                  style={{
-                    padding: '7px 18px',
-                    borderRadius: '8px',
-                    border: '1px solid #d5d9d9',
-                    background: currentPage === 1 ? '#f5f6f6' : 'linear-gradient(180deg,#f7dfa5,#f0c14b)',
-                    color: currentPage === 1 ? '#888' : '#111',
-                    fontWeight: 500,
-                    fontSize: '15px',
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    boxShadow: currentPage === 1 ? 'none' : '0 1px 0 #e2e2e2',
-                    transition: 'background 0.2s, box-shadow 0.2s'
-                  }}
-                  onMouseOver={e => {
-                    if (currentPage !== 1) {
-                      e.currentTarget.style.background = 'linear-gradient(180deg,#f0c14b,#e7b13b)';
-                    }
-                  }}
-                  onMouseOut={e => {
-                    if (currentPage !== 1) {
-                      e.currentTarget.style.background = 'linear-gradient(180deg,#f7dfa5,#f0c14b)';
-                    }
-                  }}
-                >
-                  Previous
-                </button>
-                <span
-                  style={{
-                    padding: '7px 18px',
-                    borderRadius: '8px',
-                    border: '1px solid #d5d9d9',
-                    background: '#fff',
-                    color: '#111',
-                    fontWeight: 600,
-                    fontSize: '15px',
-                    boxShadow: '0 1px 0 #e2e2e2',
-                    minWidth: '110px',
-                    textAlign: 'center',
-                    letterSpacing: '0.5px'
-                  }}
-                >
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  style={{
-                    padding: '7px 18px',
-                    borderRadius: '8px',
-                    border: '1px solid #d5d9d9',
-                    background: currentPage === totalPages ? '#f5f6f6' : 'linear-gradient(180deg,#f7dfa5,#f0c14b)',
-                    color: currentPage === totalPages ? '#888' : '#111',
-                    fontWeight: 500,
-                    fontSize: '15px',
-                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                    boxShadow: currentPage === totalPages ? 'none' : '0 1px 0 #e2e2e2',
-                    transition: 'background 0.2s, box-shadow 0.2s'
-                  }}
-                  onMouseOver={e => {
-                    if (currentPage !== totalPages) {
-                      e.currentTarget.style.background = 'linear-gradient(180deg,#f0c14b,#e7b13b)';
-                    }
-                  }}
-                  onMouseOut={e => {
-                    if (currentPage !== totalPages) {
-                      e.currentTarget.style.background = 'linear-gradient(180deg,#f7dfa5,#f0c14b)';
-                    }
-                  }}
-                >
-                  Next
-                </button>
-              </div>
-            </>
-          )}
+            color: '#222',
+          }}
+        >
+          Car List
+        </h2>
+        <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <button
+            onClick={() => handleDateFilterClick('today')}
+            style={{
+              ...dateFilterButtonStyle,
+              background:
+                filters.created_at === getDateFilter('today')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background,
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle)}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background =
+                filters.created_at === getDateFilter('today')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background;
+              e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
+              e.currentTarget.style.transform = '';
+            }}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => handleDateFilterClick('last3days')}
+            style={{
+              ...dateFilterButtonStyle,
+              background:
+                filters.created_at === getDateFilter('last3days')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background,
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle)}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background =
+                filters.created_at === getDateFilter('last3days')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background;
+              e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
+              e.currentTarget.style.transform = '';
+            }}
+          >
+            Last 3 Days
+          </button>
+          <button
+            onClick={() => handleDateFilterClick('lastweek')}
+            style={{
+              ...dateFilterButtonStyle,
+              background:
+                filters.created_at === getDateFilter('lastweek')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background,
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle)}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background =
+                filters.created_at === getDateFilter('lastweek')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background;
+              e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
+              e.currentTarget.style.transform = '';
+            }}
+          >
+            Last Week
+          </button>
+          <button
+            onClick={() => handleDateFilterClick('lastmonth')}
+            style={{
+              ...dateFilterButtonStyle,
+              background:
+                filters.created_at === getDateFilter('lastmonth')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background,
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, dateFilterButtonHoverStyle)}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background =
+                filters.created_at === getDateFilter('lastmonth')
+                  ? 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)'
+                  : dateFilterButtonStyle.background;
+              e.currentTarget.style.boxShadow = dateFilterButtonStyle.boxShadow;
+              e.currentTarget.style.transform = '';
+            }}
+          >
+            Last Month
+          </button>
+          <button
+            onClick={() => handleDateFilterClick('clean')}
+            style={cleanButtonStyle}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, cleanButtonHoverStyle)}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, cleanButtonStyle)}
+          >
+            Clean
+          </button>
         </div>
+        {cars.length === 0 ? (
+          <p style={{ fontFamily: 'Amazon Ember, Arial, sans-serif', color: '#555', fontSize: '1.15rem' }}>
+            No cars available.
+          </p>
+        ) : (
+          <>
+            <div style={{ overflowX: 'auto', borderRadius: '16px', boxShadow: '0 2px 16px 0 rgba(40,116,240,0.07)' }}>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={{ background: '#f6f7fa' }}>
+                    <th style={thTdStyle}>Description</th>
+                    <th style={thTdStyle}>Year</th>
+                    <th style={thTdStyle}>Location</th>
+                    <th style={thTdStyle}>Mileage (km)</th>
+                    <th style={thTdStyle}>Price (USD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedCars.map((car, idx) => (
+                    <tr
+                      key={idx}
+                      style={{
+                        background: idx % 2 === 0 ? '#fff' : '#f6f7fa',
+                        transition: 'background 0.2s',
+                      }}
+                    >
+                      <td style={thTdStyle}>{car.description}</td>
+                      <td style={thTdStyle}>{car.year}</td>
+                      <td style={thTdStyle}>{car.location}</td>
+                      <td style={thTdStyle}>{car.mileage}</td>
+                      <td style={thTdStyle}>{car.price}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={paginationStyle}>
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #d5d9d9',
+                  background: currentPage === 1 ? '#f5f6f6' : 'linear-gradient(180deg,#f7dfa5,#f0c14b)',
+                  color: currentPage === 1 ? '#888' : '#111',
+                  fontWeight: 500,
+                  fontSize: '15px',
+                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                  boxShadow: currentPage === 1 ? 'none' : '0 1px 0 #e2e2e2',
+                  transition: 'background 0.2s, box-shadow 0.2s',
+                }}
+                onMouseOver={(e) => {
+                  if (currentPage !== 1) {
+                    e.currentTarget.style.background = 'linear-gradient(180deg,#f0c14b,#e7b13b)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (currentPage !== 1) {
+                    e.currentTarget.style.background = 'linear-gradient(180deg,#f7dfa5,#f0c14b)';
+                  }
+                }}
+              >
+                Previous
+              </button>
+              <span
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #d5d9d9',
+                  background: '#fff',
+                  color: '#111',
+                  fontWeight: 600,
+                  fontSize: '15px',
+                  boxShadow: '0 1px 0 #e2e2e2',
+                  minWidth: '110px',
+                  textAlign: 'center',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: '7px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #d5d9d9',
+                  background: currentPage === totalPages ? '#f5f6f6' : 'linear-gradient(180deg,#f7dfa5,#f0c14b)',
+                  color: currentPage === totalPages ? '#888' : '#111',
+                  fontWeight: 500,
+                  fontSize: '15px',
+                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                  boxShadow: currentPage === totalPages ? 'none' : '0 1px 0 #e2e2e2',
+                  transition: 'background 0.2s, box-shadow 0.2s',
+                }}
+                onMouseOver={(e) => {
+                  if (currentPage !== totalPages) {
+                    e.currentTarget.style.background = 'linear-gradient(180deg,#f0c14b,#e7b13b)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (currentPage !== totalPages) {
+                    e.currentTarget.style.background = 'linear-gradient(180deg,#f7dfa5,#f0c14b)';
+                  }
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
       </main>
-    </>
+    </div>
   );
-}
+};
 
 export default CarList;
