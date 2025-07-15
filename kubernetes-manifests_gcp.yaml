@@ -112,14 +112,12 @@ spec:
       - name: frontend
         image: us-central1-docker.pkg.dev/car-market-place-1231/car-marketplace-repo/frontend:latest
         ports:
-        - containerPort: 3000
+        - containerPort: 80
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: frontend
-  annotations:
-    cloud.google.com/backend-config: '{"default": "frontend-backendconfig"}'
 spec:
   selector:
     app: frontend
@@ -127,7 +125,7 @@ spec:
     - name: http
       protocol: TCP
       port: 80
-      targetPort: 3000
+      targetPort: 80
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -183,13 +181,46 @@ spec:
       - name: extract-data
         image: us-central1-docker.pkg.dev/car-market-place-1231/car-marketplace-repo/extract-data:latest
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-api
+  template:
+    metadata:
+      labels:
+        app: ml-api
+    spec:
+      containers:
+      - name: ml-api
+        image: us-central1-docker.pkg.dev/car-market-place-1231/car-marketplace-repo/ml_api:latest
+        ports:
+        - containerPort: 8500
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-api
+spec:
+  selector:
+    app: ml-api
+  ports:
+    - protocol: TCP
+      port: 8500
+      targetPort: 8500
+---
+
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: car-marketplace-ingress
   annotations: {}
 spec:
-  ingressClassName: gce
+  ingressClassName: nginx
   rules:
     - http:
         paths:
@@ -207,6 +238,13 @@ spec:
               name: django
               port:
                 number: 8000
+        - path: /predict
+          pathType: Prefix
+          backend:
+            service:
+              name: ml-api
+              port:
+                number: 8500
 ---
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
