@@ -8,12 +8,88 @@ const menuItems = [
   { label: 'Predict Price', path: '/predict', icon: 'M8.199 14.667a1 1 0 1 0-1.886...', category: 'predict' },
 ];
 
-const MainSite = () => {
+const MainSite = ({ onSearch }) => {
+  const headerStyle = {
+    width: '100%',
+    position: 'fixed',
+    left: 0,
+    top: 0,
+    zIndex: 200,
+    background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
+    color: '#fff',
+    minHeight: '68px',
+    display: 'flex',
+    alignItems: 'center',
+    boxShadow: '0 2px 10px 0 rgba(40,116,240,0.10)',
+    padding: '0 20px',
+  };
+
+  const headerContainerStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    justifyContent: 'space-between',
+  };
+
+  const logoStyle = {
+    fontFamily: 'Amazon Ember, Arial, sans-serif',
+    fontWeight: 900,
+    fontSize: '2.2rem',
+    letterSpacing: '2px',
+    margin: '0 20px 0 0',
+    color: '#fff',
+    textShadow: '0 2px 8px #0057b899',
+  };
+
+  const searchContainerStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    background: '#fff',
+    borderRadius: '30px',
+    padding: '4px 10px',
+    boxShadow: '0 2px 8px 0 rgba(0,0,0,0.05)',
+    flexGrow: 1,
+    maxWidth: '400px',
+    minWidth: '200px',
+  };
+
+  const searchInputStyle = {
+    border: 'none',
+    outline: 'none',
+    padding: '7px 12px',
+    borderRadius: '30px',
+    fontSize: '15px',
+    flexGrow: 1,
+    background: 'transparent',
+  };
+
+  const searchButtonStyle = {
+    background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '20px',
+    fontWeight: 700,
+    fontSize: '15px',
+    padding: '7px 22px',
+    cursor: 'pointer',
+    boxShadow: '0 2px 6px 0 rgba(40,116,240,0.13)',
+    transition: 'background 0.2s, box-shadow 0.2s, transform 0.1s',
+    whiteSpace: 'nowrap',
+  };
+
+  const searchButtonHoverStyle = {
+    background: 'linear-gradient(90deg, #0057b8 0%, #2874f0 100%)',
+    boxShadow: '0 4px 12px 0 rgba(40,116,240,0.25)',
+    transform: 'scale(1.05)',
+  };
+
   const menuStyle = {
     display: 'flex',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     background: '#fff',
-    padding: '10px 0',
+    padding: '10px 20px',
     borderBottom: '1px solid #eee',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     position: 'sticky',
@@ -45,46 +121,24 @@ const MainSite = () => {
 
   return (
     <Router>
-      <header
-        style={{
-          width: '100%',
-          position: 'fixed',
-          left: 0,
-          top: 0,
-          zIndex: 200,
-          background: 'linear-gradient(90deg, #2874f0 0%, #0057b8 100%)',
-          color: '#fff',
-          minHeight: '68px',
-          display: 'flex',
-          alignItems: 'center',
-          boxShadow: '0 2px 10px 0 rgba(40,116,240,0.10)',
-          padding: '0 20px',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            width: '100%',
-            maxWidth: '1200px',
-            margin: '0 auto',
-            justifyContent: 'space-between',
-            padding: '0 10px',
-          }}
-        >
-          <h1
-            style={{
-              fontFamily: 'Amazon Ember, Arial, sans-serif',
-              fontWeight: 900,
-              fontSize: '2.2rem',
-              letterSpacing: '2px',
-              margin: '0 20px 0 0',
-              color: '#fff',
-              textShadow: '0 2px 8px #0057b899',
-            }}
-          >
-            Mooods
-          </h1>
+      <header style={headerStyle}>
+        <div style={headerContainerStyle}>
+          <h1 style={logoStyle}>Mooods</h1>
+          <div style={searchContainerStyle}>
+            <input
+              type="text"
+              placeholder="Search description, location, model..."
+              onChange={(e) => onSearch(e.target.value)}
+              style={searchInputStyle}
+            />
+            <button
+              style={searchButtonStyle}
+              onMouseOver={(e) => Object.assign(e.currentTarget.style, searchButtonHoverStyle)}
+              onMouseOut={(e) => Object.assign(e.currentTarget.style, searchButtonStyle)}
+            >
+              Search
+            </button>
+          </div>
         </div>
       </header>
       <div data-widget="horizontalMenu" style={menuStyle}>
@@ -112,7 +166,7 @@ const MainSite = () => {
           ))}
         </ul>
       </div>
-      <main style={{ paddingTop: '120px', maxWidth: '1200px', margin: '0 auto' }}>
+      <main style={{ maxWidth: '1000px', margin: '0 20px 0 250px', padding: '90px 0 20px' }}>
         <Routes>
           <Route path="/cars" element={<CarList />} />
           <Route path="/predict" element={<PricePrediction />} />
