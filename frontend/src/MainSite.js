@@ -166,7 +166,7 @@ const MainSite = ({ onSearch }) => {
           ))}
         </ul>
       </div>
-      <main style={{ maxWidth: '1000px', margin: '0 20px 0 250px', padding: '90px 0 20px' }}>
+      <main style={{ width: '100%', maxWidth: '95vw', margin: '0 auto', padding: '90px 2vw 2vw' }}>
         <Routes>
           <Route path="/cars" element={<CarList />} />
           <Route path="/predict" element={<PricePrediction />} />
