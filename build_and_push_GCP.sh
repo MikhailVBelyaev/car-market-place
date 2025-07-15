@@ -1,5 +1,3 @@
-
-
 #!/bin/bash
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
 
@@ -29,10 +27,8 @@ echo "📦 Starting Docker image build and push process using GCP Artifact Regis
 if [ ${#ARGS[@]} -eq 0 ]; then
   build_and_push django ./backend
   build_and_push frontend ./frontend
-  build_and_push tg_bot ./tg_bot
-  build_and_push scraper ./scraper
-  build_and_push extract-data ./extract_data
   build_and_push postgres ./db
+  build_and_push ml_api ./ml_api
 else
   for arg in "${ARGS[@]}"; do
     case "$arg" in
@@ -42,17 +38,11 @@ else
       frontend)
         build_and_push frontend ./frontend
         ;;
-      tg_bot)
-        build_and_push tg_bot ./tg_bot
-        ;;
-      scraper)
-        build_and_push scraper ./scraper
-        ;;
-      extract-data)
-        build_and_push extract-data ./extract_data
-        ;;
       postgres)
         build_and_push postgres ./db
+        ;;
+      ml-api)
+        build_and_push ml_api ./ml_api
         ;;
       *)
         echo "❌ Unknown service: $arg"
@@ -61,4 +51,4 @@ else
   done
 fi
 
-echo "✅ All images built and pushed successfully."
+echo "✅ All selected images built and pushed successfully."
