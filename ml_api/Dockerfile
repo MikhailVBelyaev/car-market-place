@@ -1,12 +1,12 @@
-FROM python:3.12
+# Stage 1: Builder
+FROM python:3.12 AS builder
 
 WORKDIR /app
 
 # Install compiler tools and essential build packages
 RUN apt-get update && apt-get install -y \
-    gcc g++ build-essential python3-distutils curl
-    # gcc g++ build-essential python3-pip python3-setuptools python3-wheel python3-pkg-resources python3-distutils \
- #&& pip install --upgrade pip setuptools wheel
+    gcc g++ build-essential python3-distutils curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Pin setuptools to avoid pkgutil.ImpImporter error and preinstall numpy
 RUN pip install --upgrade pip \
@@ -17,5 +17,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Final stage
+FROM python:3.12-slim
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /app /app
+
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8500"]
