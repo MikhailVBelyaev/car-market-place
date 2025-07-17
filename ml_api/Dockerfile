@@ -26,6 +26,6 @@ RUN apt-get update && apt-get install -y libgomp1 && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /app /app
-
+COPY models/ /app/models/
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8500"]
