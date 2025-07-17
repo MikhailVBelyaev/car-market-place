@@ -1,9 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
 const PricePrediction = () => {
-  const [formData, setFormData] = useState({ year: '', mileage: '' });
+  const [formData, setFormData] = useState({ year: '', mileage: '', brand: '', model: '', color: '', gear_type: '', fuel_type: '', body_type: '' });
   const [prediction, setPrediction] = useState(null);
   const [error, setError] = useState(null);
+
+  const [dropdownOptions, setDropdownOptions] = useState({
+    brand: [],
+    model: [],
+    color: [],
+    gear_type: [],
+    fuel_type: [],
+    body_type: [],
+  });
+
+  useEffect(() => {
+    axios.get('/api/cars/dropdown-options/')
+      .then((response) => {
+        setDropdownOptions(response.data);
+      })
+      .catch((error) => {
+        console.error('Error fetching dropdown options:', error);
+      });
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -16,12 +36,18 @@ const PricePrediction = () => {
       return;
     }
     setError(null);
-    fetch('/predict', {
+    fetch('/predict2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         year: parseInt(formData.year),
         mileage: parseInt(formData.mileage),
+        brand: formData.brand,
+        model: formData.model,
+        color: formData.color,
+        gear_type: formData.gear_type,
+        fuel_type: formData.fuel_type,
+        body_type: formData.body_type,
       }),
     })
       .then((res) => {
@@ -120,6 +146,150 @@ const PricePrediction = () => {
           style={inputStyle}
           placeholder="e.g., 50000"
         />
+      </div>
+      <div>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontFamily: 'Amazon Ember, Arial, sans-serif',
+            fontSize: '15px',
+            fontWeight: 500,
+          }}
+        >
+          Brand:
+        </label>
+        <select
+          name="brand"
+          value={formData.brand}
+          onChange={handleInputChange}
+          style={inputStyle}
+        >
+          <option value="">Select Brand</option>
+          {dropdownOptions.brand.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontFamily: 'Amazon Ember, Arial, sans-serif',
+            fontSize: '15px',
+            fontWeight: 500,
+          }}
+        >
+          Model:
+        </label>
+        <select
+          name="model"
+          value={formData.model}
+          onChange={handleInputChange}
+          style={inputStyle}
+        >
+          <option value="">Select Model</option>
+          {dropdownOptions.model.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontFamily: 'Amazon Ember, Arial, sans-serif',
+            fontSize: '15px',
+            fontWeight: 500,
+          }}
+        >
+          Color:
+        </label>
+        <select
+          name="color"
+          value={formData.color}
+          onChange={handleInputChange}
+          style={inputStyle}
+        >
+          <option value="">Select Color</option>
+          {dropdownOptions.color.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontFamily: 'Amazon Ember, Arial, sans-serif',
+            fontSize: '15px',
+            fontWeight: 500,
+          }}
+        >
+          Gear Type:
+        </label>
+        <select
+          name="gear_type"
+          value={formData.gear_type}
+          onChange={handleInputChange}
+          style={inputStyle}
+        >
+          <option value="">Select Gear Type</option>
+          {dropdownOptions.gear_type.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontFamily: 'Amazon Ember, Arial, sans-serif',
+            fontSize: '15px',
+            fontWeight: 500,
+          }}
+        >
+          Fuel Type:
+        </label>
+        <select
+          name="fuel_type"
+          value={formData.fuel_type}
+          onChange={handleInputChange}
+          style={inputStyle}
+        >
+          <option value="">Select Fuel Type</option>
+          {dropdownOptions.fuel_type.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: '5px',
+            fontFamily: 'Amazon Ember, Arial, sans-serif',
+            fontSize: '15px',
+            fontWeight: 500,
+          }}
+        >
+          Body Type:
+        </label>
+        <select
+          name="body_type"
+          value={formData.body_type}
+          onChange={handleInputChange}
+          style={inputStyle}
+        >
+          <option value="">Select Body Type</option>
+          {dropdownOptions.body_type.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
       </div>
       <button
         onClick={handlePredict}
