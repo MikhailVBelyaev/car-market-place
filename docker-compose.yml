@@ -143,8 +143,8 @@ services:
       context: ./ml_api
     ports:
       - "8500:8500"
-    volumes:
-      - ./databricks/models:/app/models
+    # volumes:
+    #  - ./databricks/models:/app/models
     restart: always
       
 volumes:
