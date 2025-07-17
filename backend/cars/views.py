@@ -362,3 +362,14 @@ class CarFilteredList(APIView):
             "results": serializer.data,
             "filters": filter_config,
         })
+    
+
+# DropdownOptions API view for categorical field unique values
+class DropdownOptions(APIView):
+    def get(self, request):
+        fields = ['brand', 'model', 'color', 'gear_type', 'fuel_type', 'body_type']
+        result = {}
+        for field in fields:
+            values = Car.objects.values_list(field, flat=True).distinct()
+            result[field] = sorted(list(filter(None, set(values))))
+        return Response(result)
