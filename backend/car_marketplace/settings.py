@@ -87,7 +87,7 @@ DATABASES = {
         'NAME': os.getenv('DB_NAME'),              # from .env
         'USER': os.getenv('DB_USER'),              # from .env
         'PASSWORD': os.getenv('DB_PASSWORD'),      # from .env
-        'HOST': os.getenv('DB_HOST', 'localhost'), # from .env or default
+        'HOST': os.getenv('DB_HOST', 'postgres'), # from .env or default
         'PORT': os.getenv('DB_PORT', '5432'),      # from .env or default
         'OPTIONS': {
             'options': '-c search_path=marketplace'
