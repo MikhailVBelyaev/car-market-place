@@ -199,3 +199,6 @@ oracle/create_new_instance_amper/instance-config.json
 ml_lab/venv310/
 ml_lab/venv_ml/
 
+.DS_Store
+ml_lab/.DS_Store
+*.DS_Store
