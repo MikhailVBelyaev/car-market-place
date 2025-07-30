@@ -67,7 +67,7 @@ kind: Deployment
 metadata:
   name: django
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: django
@@ -239,6 +239,13 @@ spec:
               port:
                 number: 8000
         - path: /predict
+          pathType: Prefix
+          backend:
+            service:
+              name: ml-api
+              port:
+                number: 8500
+        - path: /predict2
           pathType: Prefix
           backend:
             service:
