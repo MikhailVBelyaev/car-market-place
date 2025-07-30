@@ -16,6 +16,8 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+    networks:
+      - default
   postgres:
     build:
       context: ./db
@@ -27,6 +29,8 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./db:/docker-entrypoint-initdb.d
+    networks:
+      - default
 
   tg_bot:
     build:
@@ -146,6 +150,10 @@ services:
     # volumes:
     #  - ./databricks/models:/app/models
     restart: always
+    networks:
+      default:
+        aliases:
+          - ml-api
       
 volumes:
   databricks_data:
@@ -153,3 +161,8 @@ volumes:
   pg_data:
   esdata:
   airflow_data:
+
+networks:
+  default:
+    name: car-market-net
+    driver: bridge
