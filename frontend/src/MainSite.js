@@ -168,9 +168,9 @@ const MainSite = ({ onSearch }) => {
       </div>
       <main style={{ width: '100%', maxWidth: '95vw', margin: '0 auto', padding: '90px 2vw 2vw' }}>
         <Routes>
-          <Route path="/cars" element={<CarList ordering="-created_at" />} />
+          <Route path="/cars" element={<CarList />} />
           <Route path="/predict" element={<PricePrediction />} />
-          <Route path="/" element={<CarList ordering="-created_at" />} />
+          <Route path="/" element={<CarList />} />
         </Routes>
       </main>
     </Router>
