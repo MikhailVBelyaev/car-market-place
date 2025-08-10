@@ -16,8 +16,11 @@ ENV LC_ALL=ru_RU.UTF-8
 
 RUN apt-get update && apt-get install -y curl
 
-# Copy scraper
-COPY . /app/scraper
+# Copy scraper files
+COPY scraper/selenium_fetch_phone.py /app/scraper/selenium_fetch_phone.py
+COPY scraper/run_task_scraping_olx_vehicle.py /app/scraper/run_task_scraping_olx_vehicle.py
+
+COPY scraper/brands_models.json /app/scraper/brands_models.json
 
 CMD sh -c "\
   echo '🕒 Waiting for Django...'; \
