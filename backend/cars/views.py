@@ -348,15 +348,20 @@ class CarFilteredList(APIView):
                 else:
                     filters[key] = value
 
-        # Apply filters to get the filtered queryset
-        queryset = Car.objects.filter(**filters)
-        serializer = CarShortSerializer(queryset, many=True)
+        # Apply filters to get the filtered queryset for results
+        results_queryset = Car.objects.filter(**filters).order_by('-created_at')
+        serializer = CarShortSerializer(results_queryset, many=True)
+
+        # For filter config, remove created_at__range filter (if present) to get all available options
+        filter_filters = dict(filters)  # shallow copy
+        filter_filters.pop('created_at__range', None)
+        filter_queryset = Car.objects.filter(**filter_filters)
 
         # Log filtered queryset count for debugging
-        logger.info(f"Filtered queryset count: {queryset.count()}")
+        logger.info(f"Filtered queryset count: {results_queryset.count()}")
 
-        # Build filter config with dynamic counts based on filtered queryset
-        filter_config = build_filter_config(queryset, allowed)
+        # Build filter config with dynamic counts based on filter_queryset (not results_queryset)
+        filter_config = build_filter_config(filter_queryset, allowed)
 
         return Response({
             "results": serializer.data,
