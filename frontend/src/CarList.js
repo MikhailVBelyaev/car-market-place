@@ -56,7 +56,7 @@ const CarList = ({ onSearch }) => {
     }
     if (filters.model) query.append('model', filters.model);
     console.log(`Fetching cars with query: ${query.toString()}`);
-    fetch(`${API_URL}?${query.toString()}`)
+    fetch(`${API_URL}?${query.toString()}&ordering=-created_at`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
