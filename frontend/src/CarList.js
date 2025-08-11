@@ -49,12 +49,13 @@ const CarList = ({ onSearch }) => {
     return '';
   };
 
-  const fetchCars = (queryParams = '') => {
+  const fetchCars = (queryParams = '', customFilters = null) => {
     const query = new URLSearchParams(queryParams);
-    for (const key in filters) {
-      if (filters[key] && key !== 'model') query.append(key, filters[key]);
+    const usedFilters = customFilters || filters;
+    for (const key in usedFilters) {
+      if (usedFilters[key] && key !== 'model') query.append(key, usedFilters[key]);
     }
-    if (filters.model) query.append('model', filters.model);
+    if (usedFilters.model) query.append('model', usedFilters.model);
     console.log(`Fetching cars with query: ${query.toString()}`);
     fetch(`${API_URL}?${query.toString()}`)
       .then((res) => {
@@ -115,8 +116,11 @@ const CarList = ({ onSearch }) => {
 
   const handleDateFilterClick = (type) => {
     const dateValue = getDateFilter(type);
-    setFilters((prevFilters) => ({ ...prevFilters, created_at: dateValue }));
+    const updatedFilters = { ...filters, created_at: dateValue };
+    setFilters(updatedFilters);
     setCurrentPage(1);
+    // Immediately trigger fetchCars with the updated filters
+    fetchCars('', updatedFilters);
   };
 
   const totalPages = Math.ceil(cars.length / rowsPerPage);
