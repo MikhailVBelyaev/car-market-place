@@ -5,8 +5,9 @@ WORKDIR /app
 
 # Install compiler tools and essential build packages
 RUN apt-get update && apt-get install -y \
-    gcc g++ build-essential python3-distutils curl \
+    gcc g++ build-essential curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+# python3-distutils has been removed from instalation 6/09/2025
 
 # Pin setuptools to avoid pkgutil.ImpImporter error and preinstall numpy
 RUN pip install --upgrade pip \
