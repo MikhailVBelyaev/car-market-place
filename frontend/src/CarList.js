@@ -537,6 +537,7 @@ const CarList = ({ onSearch }) => {
                       <th style={thTdStyle}>Location</th>
                       <th style={thTdStyle}>Mileage (km)</th>
                       <th style={thTdStyle}>Price (USD)</th>
+                      <th style={thTdStyle}>Link</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -553,6 +554,19 @@ const CarList = ({ onSearch }) => {
                         <td style={thTdStyle}>{car.location || 'N/A'}</td>
                         <td style={thTdStyle}>{car.mileage || 'N/A'}</td>
                         <td style={thTdStyle}>{car.price || 'N/A'}</td>
+                        <td style={thTdStyle}>
+                          {car.reference_url ? (
+                            <a
+                              href={car.reference_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Open
+                            </a>
+                          ) : (
+                            'N/A'
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

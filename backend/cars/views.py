@@ -18,7 +18,7 @@ class CarShortSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Car
-        fields = ['description', 'price', 'location', 'created_at', 'year', 'mileage']
+        fields = ['description', 'price', 'location', 'created_at', 'year', 'mileage', 'reference_url']
 
     def get_created_at(self, obj):
         if obj.created_at:
