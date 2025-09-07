@@ -17,7 +17,9 @@ services:
       timeout: 3s
       retries: 10
     networks:
-      - default
+      default:
+        aliases:
+          - django
   postgres:
     build:
       context: ./db
@@ -31,6 +33,15 @@ services:
       - ./db:/docker-entrypoint-initdb.d
     networks:
       - default
+  
+  flyway:
+    image: flyway/flyway:10.20.1
+    platform: linux/arm64
+    depends_on:
+      - postgres
+    command: -url=jdbc:postgresql://postgres:5432/postgres -user=marketplace_user -password=marketplace_user -locations=filesystem:/flyway/sql migrate
+    volumes:
+      - ./db/updates:/flyway/sql
 
   tg_bot:
     build:
@@ -141,6 +152,10 @@ services:
       - django
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/conf.d/nginx.conf:ro
+    networks:
+      default:
+        aliases:
+          - frontend
   
   ml_api:
     build:
