@@ -1,0 +1,162 @@
+services:
+  django:
+    image: django
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+    restart: always
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      default:
+        aliases:
+          - django
+  postgres:
+    image: postgres
+    restart: always
+    env_file:
+      - ./db/.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - default
+  
+  flyway:
+    image: flyway/flyway:10.20.1
+    platform: linux/arm64
+    depends_on:
+      - postgres
+    command: -url=jdbc:postgresql://postgres:5432/postgres -user=marketplace_user -password=marketplace_user -locations=filesystem:/flyway/sql migrate
+    volumes:
+      - ./db/updates:/flyway/sql
+
+  tg_bot:
+    image: tg_bot
+    env_file:
+      - ./tg_bot/.env
+    restart: always
+
+  scraper:
+    image: scraper
+    volumes:
+      - ./scraper:/app/scraper
+    depends_on:
+      - django
+    restart: always
+
+  databricks:
+    image: python:3.12-slim
+    volumes:
+      - databricks_data:/app/databricks/data
+    working_dir: /app/databricks/data
+    command: tail -f /dev/null
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+  
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  airflow-webserver:
+    image: apache/airflow:2.9.1
+    restart: always
+    command: webserver
+    environment: &airflow_env
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://marketplace_user:marketplace_user@postgres:5432/postgres
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/ssh:/keys:ro
+    depends_on:
+      - postgres
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.1
+    restart: always
+    command: scheduler
+    environment: *airflow_env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/ssh:/keys:ro
+    depends_on:
+      - postgres
+
+  frontend:
+    image: frontend
+    ports:
+      - "80:80"
+    restart: always
+    depends_on:
+      - django
+    networks:
+      default:
+        aliases:
+          - frontend
+  
+  ml_api:
+    image: ml_api
+    ports:
+      - "8500:8500"
+    # volumes:
+    #  - ./databricks/models:/app/models
+    restart: always
+    networks:
+      default:
+        aliases:
+          - ml-api
+      
+volumes:
+  databricks_data:
+  grafana_data:
+  pg_data:
+  esdata:
+  airflow_data:
+
+networks:
+  default:
+    name: car-market-net
+    driver: bridge

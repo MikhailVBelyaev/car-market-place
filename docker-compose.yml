@@ -20,7 +20,7 @@ services:
       default:
         aliases:
           - django
-  postgres:
+  postgres: 
     build:
       context: ./db
     restart: always
