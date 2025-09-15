@@ -148,7 +148,19 @@ services:
       default:
         aliases:
           - ml-api
-      
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok_tunnel
+    depends_on:
+      - frontend
+    ports:
+      - "4040:4040"  # ngrok web interface (optional)
+    command: http --region=us frontend:80
+    env_file:
+      - ./ngrok/.env
+    networks:
+      - default
+
 volumes:
   databricks_data:
   grafana_data:

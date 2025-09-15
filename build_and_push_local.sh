@@ -13,6 +13,20 @@ build_and_deploy() {
   local path=$2
   local image_name="${name}"
 
+  if [ "$name" = "ngrok" ]; then
+    ssh "$TARGET_SERVER" "mkdir -p ~/Projects/car-market-place/ngrok"
+
+    echo "📤 Copying docker-compose_local.yml to $TARGET_SERVER as docker-compose.yml..."
+    scp "docker-compose_local.yml" "$TARGET_SERVER:~/Projects/car-market-place/docker-compose.yml"
+
+    echo "📤 Copying ngrok/.env to $TARGET_SERVER..."
+    scp "$path/.env" "$TARGET_SERVER:~/Projects/car-market-place/ngrok/.env"
+
+    echo "🚀 Starting ngrok service on $TARGET_SERVER..."
+    ssh "$TARGET_SERVER" "cd ~/Projects/car-market-place && docker compose up -d ngrok"
+    return
+  fi
+
   echo "🔧 Building image: $image_name from $path..."
   docker build -t "$image_name" "$path"
 
@@ -84,6 +98,9 @@ else
         ;;
       postgres)
         build_and_deploy postgres ./db
+        ;;
+      ngrok)
+        build_and_deploy ngrok ./ngrok
         ;;
       *)
         echo "❌ Unknown service: $arg"
