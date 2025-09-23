@@ -208,7 +208,7 @@ def process_vehicle_data(vehicle_ads, brand, model):
                         log(f"⚠️ No parameters container found for {reference_url}")
                     else:
                         params_all = params_div.find_all('p')
-                        log(f"🔎 Params found ({len(params_all)}) for {reference_url}: {[p.get_text(strip=True) for p in params_all]}")
+                        log(f"🔎 Params found ({len(params_all)}) for {reference_url} (no class filtering): {[p.get_text(strip=True) for p in params_all]}")
 
                     # Debug log footer info (ad ID, views, etc.)
                     footer_div = detail_html.find('div', {'data-testid': 'ad-footer-bar-section'})
@@ -220,7 +220,7 @@ def process_vehicle_data(vehicle_ads, brand, model):
                     # --- End new debug logging ---
 
                     if params_div:
-                        params = params_div.find_all('p', class_='css-13x8d99')
+                        params = params_div.find_all('p')
                         # Inserted model check block
                         model_check_passed = True
                         expected_model = model.lower().split()[0]
@@ -289,9 +289,13 @@ def process_vehicle_data(vehicle_ads, brand, model):
                             log(f"❌ Error in model check for {reference_url}: {e}")
 
                     # Extract detailed description text
-                    desc_block = detail_html.find('div', class_='css-19duwlz')
-                    if desc_block:
-                        ad["description_detail"] = desc_block.get_text(separator=' ', strip=True)
+                    desc_outer = detail_html.find('div', {'data-testid': 'ad_description'})
+                    if desc_outer:
+                        desc_inner = desc_outer.find('div')
+                        if desc_inner:
+                            ad["description_detail"] = desc_inner.get_text(separator=' ', strip=True)
+                        else:
+                            ad["description_detail"] = desc_outer.get_text(separator=' ', strip=True)
 
                     # Extract owner name and profile info
                     owner_name_tag = detail_html.find('h4', {'data-testid': 'user-profile-user-name'})
