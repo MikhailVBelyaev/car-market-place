@@ -12,6 +12,7 @@ build_and_deploy() {
   local name=$1
   local path=$2
   local image_name="${name}"
+  remote_path="~/Projects/car-market-place/$name"
 
   if [ "$name" = "ngrok" ]; then
     ssh "$TARGET_SERVER" "mkdir -p ~/Projects/car-market-place/ngrok"
@@ -27,20 +28,9 @@ build_and_deploy() {
     return
   fi
 
-  echo "🔧 Building image: $image_name from $path..."
-  docker build -t "$image_name" "$path"
-
-  echo "💾 Saving $image_name to $image_name.tar..."
-  docker save --output="${image_name}.tar" "$image_name"
-
-  ssh "$TARGET_SERVER" "mkdir -p ~/Projects/car-market-place"
-
-  echo "📤 Copying docker-compose_local.yml to $TARGET_SERVER as docker-compose.yml..."
-  scp "docker-compose_local.yml" "$TARGET_SERVER:~/Projects/car-market-place/docker-compose.yml"
-
-  echo "📤 Copying ${image_name}.tar and any .env files to $TARGET_SERVER..."
-  ssh "$TARGET_SERVER" "mkdir -p ~/Projects/car-market-place"
-  scp "${image_name}.tar" "$TARGET_SERVER:~/Projects/car-market-place/"
+  echo "📤 Copying $path to $TARGET_SERVER:$remote_path..."
+  ssh "$TARGET_SERVER" "mkdir -p $remote_path"
+  rsync -av --exclude '__pycache__' --exclude 'venv' "$path/" "$TARGET_SERVER:$remote_path/"
 
   # Copy service-specific .env if exists
   if [ "$name" = "django" ]; then
@@ -60,8 +50,10 @@ build_and_deploy() {
     scp "$path/.env" "$TARGET_SERVER:~/Projects/car-market-place/${name}.env"
   fi
 
-  echo "📥 Loading ${image_name}.tar on $TARGET_SERVER..."
-  ssh "$TARGET_SERVER" "cd ~/Projects/car-market-place && docker load -i ${image_name}.tar && rm ${image_name}.tar"
+  echo "🔧 Building image $image_name on $TARGET_SERVER..."
+  ssh "$TARGET_SERVER" "cd ~/Projects/car-market-place && docker build -t $image_name $name"
+
+  echo "🚀 Starting service $name on $TARGET_SERVER..."
   ssh "$TARGET_SERVER" "cd ~/Projects/car-market-place && docker compose up -d $name"
 }
 
