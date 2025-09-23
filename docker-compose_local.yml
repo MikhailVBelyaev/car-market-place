@@ -158,6 +158,7 @@ services:
     command: http --region=us frontend:80
     env_file:
       - ./ngrok/.env
+    restart: always
     networks:
       - default
 
