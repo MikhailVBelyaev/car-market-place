@@ -6,7 +6,7 @@ set -e
 ARGS=("$@")
 
 # 🖥️ Change this to your local server's user@ip
-TARGET_SERVER="user@192.168.100.194"
+TARGET_SERVER="user@192.168.100.113"
 
 build_and_deploy() {
   local name=$1
