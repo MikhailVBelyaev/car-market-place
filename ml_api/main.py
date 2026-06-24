@@ -22,10 +22,10 @@ class CarFeaturesV2(BaseModel):
     mileage: int
     brand: str
     model: str
-    gear_type: str
-    color: str
-    fuel_type: str
-    body_type: str
+    gear_type: str  = "Unknown"
+    color: str      = "Unknown"
+    fuel_type: str  = "Unknown"
+    body_type: str  = "Unknown"
 
 @app.get("/healthz")
 def health_check():

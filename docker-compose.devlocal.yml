@@ -1,0 +1,131 @@
+services:
+  postgres:
+    build:
+      context: ./db
+    restart: always
+    env_file:
+      - ./db/.env
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_data_dev:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marketplace_user"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  django:
+    build:
+      context: ./backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./backend/car_marketplace/.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      default:
+        aliases:
+          - django
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"
+    restart: always
+    depends_on:
+      - django
+    volumes:
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/nginx.conf:ro
+    networks:
+      default:
+        aliases:
+          - frontend
+
+  ml_api:
+    build:
+      context: ./ml_api
+    ports:
+      - "8500:8500"
+    restart: always
+    volumes:
+      # Mount retrained models so they're hot-swappable without rebuilding the image
+      - ./ml_api/models:/app/models:ro
+    networks:
+      default:
+        aliases:
+          - ml-api
+
+  car_vision_api:
+    build:
+      context: ./car_vision_api
+    ports:
+      - "8600:8600"
+    restart: always
+    env_file:
+      - ./car_vision_api/.env
+    networks:
+      default:
+        aliases:
+          - car-vision-api
+
+  tg_bot:
+    build:
+      context: ./tg_bot
+    restart: always
+    env_file:
+      - ./tg_bot/.env
+    depends_on:
+      django:
+        condition: service_healthy
+      ml_api:
+        condition: service_started
+      car_vision_api:
+        condition: service_started
+    networks:
+      default:
+        aliases:
+          - tg-bot
+
+  scraper:
+    build:
+      context: ./scraper
+    volumes:
+      - ./scraper:/app/scraper
+    depends_on:
+      django:
+        condition: service_healthy
+    restart: always
+
+  tg_channel:
+    build:
+      context: ./tg_channel
+    env_file:
+      - ./tg_channel/.env
+    depends_on:
+      django:
+        condition: service_healthy
+    profiles:
+      - channel     # only starts when explicitly requested: --profile channel
+    # Usage: docker compose -f docker-compose.devlocal.yml -p car-dev --profile channel run --rm tg_channel friday
+
+volumes:
+  pg_data_dev:
+
+networks:
+  default:
+    name: car-dev-net
+    driver: bridge

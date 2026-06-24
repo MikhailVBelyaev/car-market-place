@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y curl
 # Copy scraper files
 COPY ./selenium_fetch_phone.py /app/selenium_fetch_phone.py
 COPY ./run_task_scraping_olx_vehicle.py /app/run_task_scraping_olx_vehicle.py
+# v2: optimized version with concurrency, rate limiting, dedup
+COPY ./run_task_scraping_olx_vehicle_v2.py /app/run_task_scraping_olx_vehicle_v2.py
 COPY ./brands_models.json /app/brands_models.json
 
 CMD sh -c "\
@@ -28,6 +30,6 @@ CMD sh -c "\
   done; \
   echo '✅ Django is up'; \
   while true; do \
-    python /app/run_task_scraping_olx_vehicle.py; \
+    python /app/run_task_scraping_olx_vehicle_v2.py; \
     sleep 3600; \
   done"

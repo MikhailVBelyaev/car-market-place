@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>UzVehicles — Car Cost Tracker</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --blue:   #1565C0;
+      --light:  #E3F2FD;
+      --green:  #2E7D32;
+      --red:    #C62828;
+      --grey:   #9E9E9E;
+      --bg:     var(--tg-theme-bg-color, #ffffff);
+      --text:   var(--tg-theme-text-color, #212121);
+      --hint:   var(--tg-theme-hint-color, #9E9E9E);
+      --btn:    var(--tg-theme-button-color, #1565C0);
+      --btn-txt:var(--tg-theme-button-text-color, #ffffff);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      min-height: 100vh;
+    }
+    nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--light);
+      padding-bottom: 12px;
+    }
+    nav button {
+      flex: 1;
+      padding: 10px 4px;
+      border: none;
+      border-radius: 8px;
+      background: var(--light);
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    nav button.active {
+      background: var(--btn);
+      color: var(--btn-txt);
+    }
+    .card {
+      background: var(--bg);
+      border: 1px solid #E0E0E0;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .card h3 { font-size: 14px; color: var(--hint); margin-bottom: 10px; }
+    .big-number { font-size: 28px; font-weight: 700; color: var(--blue); }
+    .sub { font-size: 12px; color: var(--hint); margin-top: 4px; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 13px; color: var(--hint); margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      padding: 12px;
+      border: 1.5px solid #E0E0E0;
+      border-radius: 8px;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--blue); }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--btn);
+      color: var(--btn-txt);
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #F0F0F0;
+    }
+    .log-item:last-child { border-bottom: none; }
+    .log-date { font-size: 12px; color: var(--hint); }
+    .log-cost { font-weight: 600; color: var(--blue); }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .hidden { display: none; }
+    .page { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+    .empty { text-align: center; color: var(--hint); padding: 30px 0; font-size: 14px; }
+    .tag {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--light);
+      color: var(--blue);
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <button class="active" onclick="showPage('dashboard')">📊 Dashboard</button>
+    <button onclick="showPage('fuel')">⛽ Fuel</button>
+    <button onclick="showPage('expenses')">🔧 Expenses</button>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <div id="page-dashboard" class="page">
+    <div class="stats-grid">
+      <div class="card">
+        <h3>This month</h3>
+        <div class="big-number" id="dash-month-total">$0</div>
+        <div class="sub">total spent</div>
+      </div>
+      <div class="card">
+        <h3>Cost per km</h3>
+        <div class="big-number" id="dash-cost-km">—</div>
+        <div class="sub">this month</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Fuel efficiency</h3>
+      <div class="big-number" id="dash-l100">—</div>
+      <div class="sub">L / 100 km (your real data)</div>
+    </div>
+    <div class="card">
+      <h3>Ownership so far</h3>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+        <div>
+          <div style="font-size:13px; color:var(--hint);">Total spent</div>
+          <div style="font-size:20px; font-weight:700;" id="dash-total-spent">$0</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:13px; color:var(--hint);">Market value</div>
+          <div style="font-size:20px; font-weight:700; color:var(--green);" id="dash-market-value">—</div>
+        </div>
+      </div>
+      <div style="margin-top:12px; font-size:13px; color:var(--hint);" id="dash-net-cost">
+        Net cost of ownership = total spent − market value
+      </div>
+    </div>
+    <button class="btn" onclick="showPage('fuel')">⛽ Log fuel fill-up</button>
+    <button class="btn" style="background:var(--light); color:var(--blue); margin-top:8px;"
+            onclick="showPage('expenses')">🔧 Log an expense</button>
+  </div>
+
+  <!-- FUEL LOG -->
+  <div id="page-fuel" class="page hidden">
+    <div class="card">
+      <h3>New fuel fill-up</h3>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="fuel-date">
+      </div>
+      <div class="form-group">
+        <label>Odometer reading (km)</label>
+        <input type="number" id="fuel-odometer" placeholder="e.g. 21350">
+      </div>
+      <div class="form-group">
+        <label>Liters filled</label>
+        <input type="number" id="fuel-liters" placeholder="e.g. 42" step="0.1">
+      </div>
+      <div class="form-group">
+        <label>Total cost (USD)</label>
+        <input type="number" id="fuel-cost" placeholder="e.g. 27.30" step="0.01">
+      </div>
+      <button class="btn" onclick="saveFuel()">Save fill-up</button>
+    </div>
+    <div class="card">
+      <h3>Fuel history</h3>
+      <div id="fuel-list"><div class="empty">No fill-ups logged yet</div></div>
+    </div>
+  </div>
+
+  <!-- EXPENSES -->
+  <div id="page-expenses" class="page hidden">
+    <div class="card">
+      <h3>New expense</h3>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="exp-date">
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="exp-category">
+          <option value="oil">Oil change</option>
+          <option value="tires">Tires</option>
+          <option value="repair">Repair</option>
+          <option value="insurance">Insurance</option>
+          <option value="wash">Car wash</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cost (USD)</label>
+        <input type="number" id="exp-cost" placeholder="e.g. 45.00" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Note (optional)</label>
+        <input type="text" id="exp-note" placeholder="e.g. Changed brake pads">
+      </div>
+      <button class="btn" onclick="saveExpense()">Save expense</button>
+    </div>
+    <div class="card">
+      <h3>Expense history</h3>
+      <div id="expense-list"><div class="empty">No expenses logged yet</div></div>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
+
+    // ── Local storage data layer (replace with API calls in production) ────────
+    const store = {
+      fuel:     JSON.parse(localStorage.getItem('uz_fuel')     || '[]'),
+      expenses: JSON.parse(localStorage.getItem('uz_expenses') || '[]'),
+      save() {
+        localStorage.setItem('uz_fuel',     JSON.stringify(this.fuel));
+        localStorage.setItem('uz_expenses', JSON.stringify(this.expenses));
+      }
+    };
+
+    // ── Navigation ────────────────────────────────────────────────────────────
+    function showPage(name) {
+      document.querySelectorAll('[id^="page-"]').forEach(el => el.classList.add('hidden'));
+      document.getElementById('page-' + name).classList.remove('hidden');
+      document.querySelectorAll('nav button').forEach((btn, i) => {
+        btn.classList.toggle('active', ['dashboard','fuel','expenses'][i] === name);
+      });
+      if (name === 'dashboard') updateDashboard();
+      if (name === 'fuel')      renderFuelList();
+      if (name === 'expenses')  renderExpenseList();
+    }
+
+    // ── Fuel ──────────────────────────────────────────────────────────────────
+    function saveFuel() {
+      const entry = {
+        date:     document.getElementById('fuel-date').value,
+        odometer: +document.getElementById('fuel-odometer').value,
+        liters:   +document.getElementById('fuel-liters').value,
+        cost:     +document.getElementById('fuel-cost').value,
+        id:       Date.now(),
+      };
+      if (!entry.date || !entry.odometer || !entry.liters || !entry.cost) {
+        alert('Please fill all fields'); return;
+      }
+      store.fuel.push(entry);
+      store.save();
+      showPage('fuel');
+    }
+
+    function renderFuelList() {
+      const el = document.getElementById('fuel-list');
+      if (!store.fuel.length) { el.innerHTML = '<div class="empty">No fill-ups logged yet</div>'; return; }
+      const sorted = [...store.fuel].sort((a,b) => b.date.localeCompare(a.date));
+      el.innerHTML = sorted.map(e => {
+        const l100 = store.fuel.indexOf(e) > 0
+          ? (e.liters / ((e.odometer - sorted[sorted.indexOf(e)+1]?.odometer) || 1) * 100).toFixed(1)
+          : '—';
+        return `<div class="log-item">
+          <div>
+            <div>${e.date} <span class="tag">${e.liters}L</span></div>
+            <div class="log-date">${e.odometer.toLocaleString()} km · ${l100} L/100km</div>
+          </div>
+          <div class="log-cost">$${e.cost.toFixed(2)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Expenses ──────────────────────────────────────────────────────────────
+    const CAT_EMOJI = {oil:'🛢️', tires:'🔄', repair:'🔧', insurance:'🛡️', wash:'🚿', other:'📦'};
+
+    function saveExpense() {
+      const entry = {
+        date:     document.getElementById('exp-date').value,
+        category: document.getElementById('exp-category').value,
+        cost:     +document.getElementById('exp-cost').value,
+        note:     document.getElementById('exp-note').value,
+        id:       Date.now(),
+      };
+      if (!entry.date || !entry.cost) { alert('Please fill required fields'); return; }
+      store.expenses.push(entry);
+      store.save();
+      showPage('expenses');
+    }
+
+    function renderExpenseList() {
+      const el = document.getElementById('expense-list');
+      if (!store.expenses.length) { el.innerHTML = '<div class="empty">No expenses logged yet</div>'; return; }
+      const sorted = [...store.expenses].sort((a,b) => b.date.localeCompare(a.date));
+      el.innerHTML = sorted.map(e => `<div class="log-item">
+        <div>
+          <div>${CAT_EMOJI[e.category] || '📦'} ${e.category} <span class="tag">${e.date}</span></div>
+          ${e.note ? `<div class="log-date">${e.note}</div>` : ''}
+        </div>
+        <div class="log-cost">$${e.cost.toFixed(2)}</div>
+      </div>`).join('');
+    }
+
+    // ── Dashboard ─────────────────────────────────────────────────────────────
+    function updateDashboard() {
+      const now   = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+      const monthFuel = store.fuel.filter(e => e.date.startsWith(month));
+      const monthExp  = store.expenses.filter(e => e.date.startsWith(month));
+      const monthTotal = monthFuel.reduce((s,e) => s+e.cost, 0) + monthExp.reduce((s,e) => s+e.cost, 0);
+
+      document.getElementById('dash-month-total').textContent = `$${monthTotal.toFixed(0)}`;
+
+      // Fuel efficiency from last 2 fill-ups
+      const sorted = [...store.fuel].sort((a,b) => a.odometer - b.odometer);
+      if (sorted.length >= 2) {
+        const last = sorted[sorted.length-1];
+        const prev = sorted[sorted.length-2];
+        const km   = last.odometer - prev.odometer;
+        const l100 = km > 0 ? (last.liters / km * 100).toFixed(1) : '—';
+        document.getElementById('dash-l100').textContent = `${l100} L`;
+
+        const totalKm = (sorted[sorted.length-1].odometer - sorted[0].odometer) || 1;
+        const costPerKm = (monthTotal / (totalKm / (store.fuel.length||1))).toFixed(3);
+        document.getElementById('dash-cost-km').textContent = `$${costPerKm}`;
+      }
+
+      const totalSpent = [...store.fuel, ...store.expenses].reduce((s,e) => s+e.cost, 0);
+      document.getElementById('dash-total-spent').textContent = `$${totalSpent.toFixed(0)}`;
+
+      // Market value — would come from API in production
+      const marketVal = tg?.initDataUnsafe?.user ? null : null;
+      document.getElementById('dash-market-value').textContent = 'Use bot →';
+      document.getElementById('dash-net-cost').textContent =
+        `Total spent: $${totalSpent.toFixed(0)} · Check market value in @MVehicleBot`;
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    document.getElementById('fuel-date').value = new Date().toISOString().slice(0,10);
+    document.getElementById('exp-date').value  = new Date().toISOString().slice(0,10);
+    updateDashboard();
+  </script>
+</body>
+</html>

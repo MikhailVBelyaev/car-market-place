@@ -202,3 +202,14 @@ ml_lab/venv_ml/
 .DS_Store
 ml_lab/.DS_Store
 *.DS_Store
+
+# Large ML model binaries — store in object storage, not git
+*.pkl
+*.joblib
+
+# Claude Code internal session files
+.claude/
+
+# Keep requirements.txt files despite *.txt rule above
+!requirements.txt
+!**/requirements.txt

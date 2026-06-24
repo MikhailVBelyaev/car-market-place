@@ -1,6 +1,6 @@
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, Q
 from rest_framework import serializers
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, TruncMonth
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -36,6 +36,12 @@ class CarList(APIView):
         return Response(serializer.data)
 
     def post(self, request):
+        # Upsert: if a car with this car_ad_id already exists, return 200
+        # "exists" instead of attempting an insert that would fail the unique
+        # constraint. The scraper v2 treats both 200 and 201 as success.
+        ad_id = request.data.get('car_ad_id')
+        if ad_id and Car.objects.filter(car_ad_id=ad_id).exists():
+            return Response({'status': 'exists', 'car_ad_id': ad_id}, status=status.HTTP_200_OK)
         serializer = CarSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -378,3 +384,334 @@ class DropdownOptions(APIView):
             values = Car.objects.values_list(field, flat=True).distinct()
             result[field] = sorted(list(filter(None, set(values))))
         return Response(result)
+
+
+class BrandModels(APIView):
+    """Return {brand: [model, ...]} mapping so the UI can filter models by brand."""
+    def get(self, request):
+        pairs = (
+            Car.objects.filter(brand__isnull=False, model__isnull=False)
+            .values_list('brand', 'model')
+            .distinct()
+        )
+        result = {}
+        for brand, model in pairs:
+            result.setdefault(brand, [])
+            if model not in result[brand]:
+                result[brand].append(model)
+        for brand in result:
+            result[brand].sort()
+        return Response(result)
+
+
+class PriceHistory(APIView):
+    """Monthly price trend for a specific car spec.
+
+    When `mileage` is supplied, uses hedonic regression:
+      - Takes ALL listings (no mileage filter)
+      - Computes one pooled price-per-km slope across all months
+      - Per month: price_at_mileage = avg_price + slope × (avg_km − user_km)
+      - This answers: "what would MY exact car have cost each month?"
+
+    Without `mileage`, returns plain monthly averages.
+
+    Required: brand, model
+    Optional: year, gear_type, color, mileage
+    """
+    def get(self, request):
+        brand      = request.query_params.get('brand')
+        model_name = request.query_params.get('model')
+        if not brand or not model_name:
+            return Response({"error": "brand and model are required"}, status=400)
+
+        since = timezone.now() - timedelta(days=400)
+        qs = Car.objects.filter(
+            brand=brand, model=model_name,
+            price__gt=0, price__lt=500000,
+            mileage__gt=500, mileage__lt=500000,
+            created_at__gte=since,
+        )
+        if request.query_params.get('year'):
+            qs = qs.filter(year=int(request.query_params['year']))
+        if request.query_params.get('gear_type'):
+            qs = qs.filter(gear_type=request.query_params['gear_type'])
+        if request.query_params.get('color'):
+            qs = qs.filter(color=request.query_params['color'])
+
+        user_mileage_raw = request.query_params.get('mileage')
+
+        if user_mileage_raw:
+            # ── Hedonic mode ──────────────────────────────────────────────
+            user_km = int(user_mileage_raw)
+
+            # Pooled slope across all months (stable, not per-month noise)
+            rows_all = list(qs.values_list('price', 'mileage'))
+            if len(rows_all) >= 10:
+                prices   = [float(r[0]) for r in rows_all]
+                kms      = [float(r[1]) for r in rows_all]
+                n        = len(rows_all)
+                mean_p   = sum(prices) / n
+                mean_km  = sum(kms) / n
+                cov      = sum((p - mean_p) * (k - mean_km) for p, k in zip(prices, kms)) / n
+                var_km   = sum((k - mean_km) ** 2 for k in kms) / n
+                slope    = cov / var_km if var_km > 0 else 0.0
+            else:
+                slope = 0.0
+
+            monthly = (
+                qs.annotate(month=TruncMonth('created_at'))
+                .values('month')
+                .annotate(avg_price=Avg('price'), avg_km=Avg('mileage'), count=Count('car_id'))
+                .order_by('month')
+            )
+            data = []
+            for r in monthly:
+                adj = round(float(r['avg_price']) + slope * (user_km - float(r['avg_km'])))
+                data.append({
+                    "month":            r['month'].strftime('%Y-%m'),
+                    "avg_price":        round(r['avg_price']),
+                    "price_at_mileage": adj,
+                    "avg_km":           round(r['avg_km']),
+                    "count":            r['count'],
+                })
+            return Response({
+                "data":         data,
+                "hedonic":      True,
+                "pooled_slope": round(slope, 6),
+                "user_km":      user_km,
+            })
+
+        # ── Plain mode (no mileage param) ─────────────────────────────────
+        rows = (
+            qs.annotate(month=TruncMonth('created_at'))
+            .values('month')
+            .annotate(avg_price=Avg('price'), count=Count('car_id'))
+            .order_by('month')
+        )
+        data = [
+            {"month": r['month'].strftime('%Y-%m'),
+             "avg_price": round(r['avg_price']),
+             "count":     r['count']}
+            for r in rows
+        ]
+        return Response({"data": data})
+
+
+class SmartPrice(APIView):
+    """Current market price for a car spec + mileage.
+
+    Searches the same mileage band that will be shown on the chart,
+    so the price message and trend chart always show identical data.
+
+    Tries progressively wider bands/windows until ≥ MIN_LISTINGS found.
+    Returns mileage_low + mileage_high so the bot can pass them to
+    PriceHistory for a consistent chart.
+
+    Required: brand, model, year, gear_type, color, mileage
+    """
+    MIN_LISTINGS = 5
+
+    def get(self, request):
+        try:
+            brand      = request.query_params['brand']
+            model_name = request.query_params['model']
+            year       = int(request.query_params['year'])
+            gear_type  = request.query_params['gear_type']
+            color      = request.query_params['color']
+            mileage    = int(request.query_params['mileage'])
+        except (KeyError, ValueError):
+            return Response(
+                {"error": "brand, model, year, gear_type, color, mileage all required"},
+                status=400,
+            )
+
+        base_qs = Car.objects.filter(
+            brand=brand, model=model_name, year=year,
+            gear_type=gear_type, color=color, price__gt=0,
+        )
+
+        # Search order: tighter band first, widen only if needed
+        search_plans = [
+            (30, 0.25),   # last 30 days, ±25%
+            (60, 0.25),   # last 60 days, ±25%
+            (30, 0.50),   # last 30 days, ±50%
+            (90, 0.50),   # last 90 days, ±50%
+        ]
+
+        for days, band in search_plans:
+            low  = int(mileage * (1 - band))
+            high = int(mileage * (1 + band))
+            qs = base_qs.filter(
+                mileage__gte=low, mileage__lte=high,
+                created_at__gte=timezone.now() - timedelta(days=days),
+            )
+            count = qs.count()
+            if count >= self.MIN_LISTINGS:
+                prices = sorted(qs.values_list('price', flat=True))
+                median = prices[len(prices) // 2]
+                return Response({
+                    "price":        round(median),
+                    "avg":          round(sum(prices) / len(prices)),
+                    "min":          round(prices[0]),
+                    "max":          round(prices[-1]),
+                    "source":       f"market_{days}d",
+                    "count":        count,
+                    "period":       f"last {days} days",
+                    "mileage_band": f"{low:,}–{high:,} km",
+                    "mileage_low":  low,
+                    "mileage_high": high,
+                })
+
+        # No plan found enough data — ML fallback triggered by caller
+        low  = int(mileage * 0.75)
+        high = int(mileage * 1.25)
+        return Response({
+            "price":        None,
+            "source":       "insufficient_data",
+            "count":        base_qs.filter(
+                mileage__gte=low, mileage__lte=high,
+                created_at__gte=timezone.now() - timedelta(days=90),
+            ).count(),
+            "mileage_low":  low,
+            "mileage_high": high,
+        })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Channel analytics endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+class BrandRanking(APIView):
+    """Top brands by listing count for the last N days, with week-over-week change.
+
+    Query params: days (default 7), top (default 10)
+    """
+    def get(self, request):
+        days = int(request.query_params.get('days', 7))
+        top  = int(request.query_params.get('top', 10))
+        now  = timezone.now()
+        since      = now - timedelta(days=days)
+        prev_since = since - timedelta(days=days)
+
+        current_qs = (
+            Car.objects.filter(created_at__gte=since, price__gt=0)
+            .values('brand')
+            .annotate(count=Count('car_id'), avg_price=Avg('price'))
+            .order_by('-count')[:top]
+        )
+        prev_counts = {
+            r['brand']: r['count']
+            for r in Car.objects.filter(
+                created_at__gte=prev_since, created_at__lt=since, price__gt=0
+            ).values('brand').annotate(count=Count('car_id'))
+        }
+
+        result = []
+        for r in current_qs:
+            prev = prev_counts.get(r['brand'], 0)
+            pct  = round((r['count'] - prev) / prev * 100, 1) if prev > 0 else None
+            result.append({
+                'brand':      r['brand'],
+                'count':      r['count'],
+                'avg_price':  round(float(r['avg_price'])),
+                'prev_count': prev,
+                'pct_change': pct,
+            })
+        return Response({'period_days': days, 'brands': result})
+
+
+class PriceMovers(APIView):
+    """Models with the biggest price change vs the previous period.
+
+    Query params: days (default 7), min_count (default 5), top (default 5)
+    """
+    def get(self, request):
+        days      = int(request.query_params.get('days', 7))
+        min_count = int(request.query_params.get('min_count', 5))
+        top       = int(request.query_params.get('top', 5))
+        now       = timezone.now()
+        since      = now - timedelta(days=days)
+        prev_since = since - timedelta(days=days)
+
+        current = {
+            (r['brand'], r['model']): {'avg': float(r['avg_price']), 'count': r['count']}
+            for r in Car.objects.filter(created_at__gte=since, price__gt=0)
+                .values('brand', 'model')
+                .annotate(avg_price=Avg('price'), count=Count('car_id'))
+                .filter(count__gte=min_count)
+        }
+        prev = {
+            (r['brand'], r['model']): float(r['avg_price'])
+            for r in Car.objects.filter(
+                created_at__gte=prev_since, created_at__lt=since, price__gt=0
+            ).values('brand', 'model').annotate(avg_price=Avg('price'))
+        }
+
+        movers = []
+        for (brand, model), curr in current.items():
+            if (brand, model) in prev and prev[(brand, model)] > 0:
+                pct = (curr['avg'] - prev[(brand, model)]) / prev[(brand, model)] * 100
+                movers.append({
+                    'brand':          brand,
+                    'model':          model,
+                    'avg_price':      round(curr['avg']),
+                    'prev_avg_price': round(prev[(brand, model)]),
+                    'change_pct':     round(pct, 1),
+                    'count':          curr['count'],
+                })
+
+        movers.sort(key=lambda x: x['change_pct'])
+        return Response({
+            'period_days': days,
+            'fallers':     movers[:top],
+            'risers':      list(reversed(movers[-top:])),
+        })
+
+
+class WeeklyDigest(APIView):
+    """Full weekly market summary for the channel digest post."""
+    def get(self, request):
+        now        = timezone.now()
+        since      = now - timedelta(days=7)
+        prev_since = since - timedelta(days=7)
+
+        total      = Car.objects.filter(created_at__gte=since).count()
+        prev_total = Car.objects.filter(created_at__gte=prev_since, created_at__lt=since).count()
+
+        top_brands = [
+            {'brand': r['brand'], 'count': r['count'], 'avg_price': round(float(r['avg_price']))}
+            for r in Car.objects.filter(created_at__gte=since, price__gt=0)
+                .values('brand')
+                .annotate(count=Count('car_id'), avg_price=Avg('price'))
+                .order_by('-count')[:10]
+        ]
+
+        # Year-over-year avg price for top 5 brands
+        top5 = [b['brand'] for b in top_brands[:5]]
+        since_year = now - timedelta(days=365)
+        yoy = {}
+        for brand in top5:
+            qs_now  = Car.objects.filter(brand=brand, created_at__gte=since, price__gt=0)
+            qs_year = Car.objects.filter(
+                brand=brand,
+                created_at__gte=since_year,
+                created_at__lt=since_year + timedelta(days=7),
+                price__gt=0,
+            )
+            avg_now  = qs_now.aggregate(a=Avg('price'))['a']
+            avg_year = qs_year.aggregate(a=Avg('price'))['a']
+            if avg_now and avg_year:
+                yoy[brand] = {
+                    'now':     round(float(avg_now)),
+                    'year_ago': round(float(avg_year)),
+                    'change_pct': round((float(avg_now) - float(avg_year)) / float(avg_year) * 100, 1),
+                }
+
+        total_change_pct = round((total - prev_total) / prev_total * 100, 1) if prev_total else None
+        return Response({
+            'total_listings':      total,
+            'prev_total_listings': prev_total,
+            'total_change_pct':    total_change_pct,
+            'top_brands':          top_brands,
+            'yoy_price_change':    yoy,
+        })
