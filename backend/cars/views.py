@@ -1,4 +1,5 @@
 from django.db.models import Avg, Count, Min, Max, Q
+from django.db import connection
 from rest_framework import serializers
 from django.db.models.functions import TruncDate, TruncMonth
 from rest_framework.views import APIView
@@ -707,16 +708,19 @@ class WeeklyDigest(APIView):
                 model_name = m['model']
                 avg_p = float(m['avg_price'])
 
-                # Outlier-filtered min/max: exclude prices outside 0.25x–4x the average
-                qs_clean = Car.objects.filter(
-                    brand=brand_name, model=model_name,
-                    created_at__gte=since, price__gt=0,
-                    price__gte=avg_p * 0.25,
-                    price__lte=avg_p * 4,
-                )
-                clean_agg = qs_clean.aggregate(mn=Min('price'), mx=Max('price'))
-                min_price = round(float(clean_agg['mn'])) if clean_agg['mn'] else round(avg_p)
-                max_price = round(float(clean_agg['mx'])) if clean_agg['mx'] else round(avg_p)
+                # 10th–90th percentile range: excludes crashed/damaged (low) and overpriced/modified (high)
+                with connection.cursor() as cur:
+                    cur.execute("""
+                        SELECT
+                            PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY price),
+                            PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY price)
+                        FROM marketplace.cars
+                        WHERE brand = %s AND model = %s
+                          AND created_at >= %s AND price > 0
+                    """, [brand_name, model_name, since])
+                    pct = cur.fetchone()
+                min_price = round(float(pct[0])) if pct and pct[0] else round(avg_p)
+                max_price = round(float(pct[1])) if pct and pct[1] else round(avg_p)
 
                 # YoY: same brand+model, now vs ~1 year ago
                 qs_year = Car.objects.filter(
