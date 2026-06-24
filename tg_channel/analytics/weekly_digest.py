@@ -1,10 +1,11 @@
-"""Friday post: full weekly market digest with brand ranking chart."""
+"""Friday post: full weekly market digest — brands + top models with price ranges."""
 import io
 import requests
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import numpy as np
 from datetime import date
 from charts.style import apply_base_style, BLUE, GREEN, RED, GREY, BG, pct_arrow
 
@@ -16,69 +17,69 @@ def fetch(django_url: str) -> dict:
 
 
 def build_chart(data: dict) -> io.BytesIO:
-    brands = data['top_brands'][:10]
-    yoy    = data.get('yoy_price_change', {})
+    brands = data['top_brands'][:8]
     today  = date.today().strftime('%d.%m.%Y')
 
-    fig = plt.figure(figsize=(12, 9), facecolor=BG)
-    gs  = gridspec.GridSpec(2, 1, height_ratios=[1.6, 1], hspace=0.45)
+    fig = plt.figure(figsize=(13, 10), facecolor=BG)
+    gs  = gridspec.GridSpec(2, 1, height_ratios=[1.4, 1], hspace=0.5)
 
-    # ── Top panel: brand ranking bars ──────────────────────────────────────
+    # ── Top panel: brand bars ──────────────────────────────────────────────────
     ax1 = fig.add_subplot(gs[0])
     apply_base_style(fig, ax1)
 
     b_labels = [b['brand'] for b in reversed(brands)]
     b_counts = [b['count'] for b in reversed(brands)]
-    colors   = [BLUE] * len(b_labels)
-
-    ax1.barh(b_labels, b_counts, color=colors, height=0.6, zorder=2)
+    ax1.barh(b_labels, b_counts, color=BLUE, height=0.6, zorder=2)
     max_c = max(b_counts) if b_counts else 1
-    for i, (brand_data) in enumerate(reversed(brands)):
+    for i, b in enumerate(reversed(brands)):
         ax1.text(
-            brand_data['count'] + max_c * 0.01,
-            i,
-            f"{brand_data['count']:,}   ${brand_data['avg_price']:,}",
+            b['count'] + max_c * 0.01, i,
+            f"{b['count']:,}   avg ${b['avg_price']:,}",
             va='center', fontsize=8.5, color='#212121',
         )
-    ax1.set_xlim(0, max_c * 1.5)
+    ax1.set_xlim(0, max_c * 1.55)
     ax1.set_title(
-        f"Top 10 markalar hafta uchun / марок за неделю  ·  {today}",
+        f"Top markalar hafta uchun / Топ марок за неделю  ·  {today}",
         fontsize=11, fontweight='bold', color='#212121', pad=10,
     )
     ax1.set_xlabel("E'lonlar soni / Объявлений", fontsize=8.5, color=GREY)
     ax1.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{int(x):,}'))
 
-    # ── Bottom panel: YoY price changes for top 5 brands ──────────────────
+    # ── Bottom panel: top 3 brands × top 3 models price range ─────────────────
     ax2 = fig.add_subplot(gs[1])
     apply_base_style(fig, ax2)
 
-    yoy_brands  = [b for b in brands[:5] if b['brand'] in yoy]
-    yoy_labels  = [b['brand'] for b in yoy_brands]
-    yoy_pcts    = [yoy[b['brand']]['change_pct'] for b in yoy_brands]
-    bar_colors  = [GREEN if p >= 0 else RED for p in yoy_pcts]
+    top3_brands = [b for b in brands[:3] if b.get('models')]
+    if top3_brands:
+        labels, mins_list, maxs_list, avgs_list, colors_list = [], [], [], [], []
+        palette = [BLUE, '#1976D2', '#42A5F5']
+        for ci, brand in enumerate(top3_brands):
+            for m in brand['models'][:3]:
+                labels.append(f"{m['model'][:10]}\n({brand['brand'][:6]})")
+                mins_list.append(m['min_price'])
+                maxs_list.append(m['max_price'])
+                avgs_list.append(m['avg_price'])
+                colors_list.append(palette[ci % len(palette)])
 
-    if yoy_brands:
-        bars = ax2.bar(yoy_labels, yoy_pcts, color=bar_colors, width=0.5, zorder=2)
-        for bar, pct in zip(bars, yoy_pcts):
-            sign = '+' if pct >= 0 else ''
-            ax2.text(
-                bar.get_x() + bar.get_width() / 2,
-                pct + (0.3 if pct >= 0 else -0.3),
-                f'{sign}{pct:.1f}%',
-                ha='center', va='bottom' if pct >= 0 else 'top',
-                fontsize=9, fontweight='bold',
-                color=GREEN if pct >= 0 else RED,
-            )
-        ax2.axhline(0, color=GREY, linewidth=1)
+        y = np.arange(len(labels))
+        ranges = [mx - mn for mn, mx in zip(mins_list, maxs_list)]
+        ax2.barh(y, ranges, left=mins_list, color=colors_list, height=0.5, alpha=0.55, zorder=2)
+        ax2.scatter(avgs_list, y, color=colors_list, s=40, zorder=3, label='avg')
+
+        for i, (mn, mx, av) in enumerate(zip(mins_list, maxs_list, avgs_list)):
+            ax2.text(mx + (max(maxs_list) - min(mins_list)) * 0.01, i,
+                     f"avg ${av:,}", va='center', fontsize=7.5, color='#212121')
+
+        ax2.set_yticks(y)
+        ax2.set_yticklabels(labels, fontsize=8)
         ax2.set_title(
-            "1 yillik narx o'zgarishi / Изменение цены за год (%)",
+            "Modellar narx diapazoni / Диапазон цен по моделям ($)",
             fontsize=10, fontweight='bold', color='#212121', pad=8,
         )
-        ax2.set_ylabel('%', fontsize=9, color=GREY)
+        ax2.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'${int(x):,}'))
     else:
-        ax2.text(0.5, 0.5, 'Yillik ma\'lumot yetarli emas',
-                 ha='center', va='center', transform=ax2.transAxes,
-                 fontsize=10, color=GREY)
+        ax2.text(0.5, 0.5, "Ma'lumot yetarli emas",
+                 ha='center', va='center', transform=ax2.transAxes, fontsize=10, color=GREY)
 
     plt.suptitle(
         "📊 Avtomobil bozori | Авторынок Узбекистана",
@@ -92,48 +93,50 @@ def build_chart(data: dict) -> io.BytesIO:
     return buf
 
 
+def _model_line(m: dict, lang: str) -> str:
+    """One line per model: name, count, price range, avg, YoY change."""
+    count_word = "ta" if lang == 'uz' else "шт"
+    avg_word   = "avg" if lang == 'uz' else "avg"
+    line = f"   • {m['model']}: {m['count']:,} {count_word} · ${m['min_price']:,}–${m['max_price']:,} · {avg_word} ${m['avg_price']:,}"
+    if m.get('yoy_pct') is not None:
+        arrow = pct_arrow(m['yoy_pct'])
+        line += f" · {arrow}"
+    return line
+
+
 def build_text(data: dict) -> str:
-    brands  = data['top_brands']
-    total   = data['total_listings']
-    prev    = data['prev_total_listings']
-    chg     = data.get('total_change_pct')
-    yoy     = data.get('yoy_price_change', {})
-    today   = date.today().strftime('%d.%m.%Y')
+    brands = data['top_brands']
+    total  = data['total_listings']
+    today  = date.today().strftime('%d.%m.%Y')
 
-    total_arrow = pct_arrow(chg) if chg is not None else ''
+    # Build brand blocks (top 5 brands, top 5 models each)
+    uz_blocks, ru_blocks = [], []
+    for b in brands[:5]:
+        uz_lines = [f"🚗 *{b['brand']}* — {b['count']:,} ta e'lon"]
+        ru_lines = [f"🚗 *{b['brand']}* — {b['count']:,} шт"]
+        for m in b.get('models', [])[:5]:
+            uz_lines.append(_model_line(m, 'uz'))
+            ru_lines.append(_model_line(m, 'ru'))
+        uz_blocks.append('\n'.join(uz_lines))
+        ru_blocks.append('\n'.join(ru_lines))
 
-    top3_uz = '\n'.join(
-        f"  {i+1}. {b['brand']} — {b['count']:,} ta, o'rtacha ${b['avg_price']:,}"
-        for i, b in enumerate(brands[:5])
-    )
-    top3_ru = '\n'.join(
-        f"  {i+1}. {b['brand']} — {b['count']:,} шт, средняя ${b['avg_price']:,}"
-        for i, b in enumerate(brands[:5])
-    )
-
-    yoy_uz = '\n'.join(
-        f"  • {brand}: {pct_arrow(d['change_pct'])} (${d['year_ago']:,} → ${d['now']:,})"
-        for brand, d in list(yoy.items())[:4]
-    ) or "  Ma'lumot yetarli emas"
-    yoy_ru = '\n'.join(
-        f"  • {brand}: {pct_arrow(d['change_pct'])} (${d['year_ago']:,} → ${d['now']:,})"
-        for brand, d in list(yoy.items())[:4]
-    ) or "  Недостаточно данных"
+    uz_brands_text = '\n\n'.join(uz_blocks)
+    ru_brands_text = '\n\n'.join(ru_blocks)
 
     return (
         f"📊 *HAFTALIK HISOBOT · {today}*\n"
         f"Avtomobil bozori Uzbekiston\n\n"
-        f"📋 Jami e'lonlar: *{total:,}* {total_arrow}\n\n"
-        f"🏆 *Top 5 markalar:*\n{top3_uz}\n\n"
-        f"📉 *1 yillik narx o'zgarishi:*\n{yoy_uz}\n\n"
+        f"📋 Jami e'lonlar: *{total:,}*\n\n"
+        f"🏆 *Top 5 markalar va eng mashhur modellar:*\n\n"
+        f"{uz_brands_text}\n\n"
         f"💡 _O'z mashinangiz qancha turadi?_\n"
         f"👉 @MVehicleBot — 30 soniyada bepul baho\n"
         f"\n━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📊 *ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ · {today}*\n"
         f"Авторынок Узбекистана\n\n"
-        f"📋 Всего объявлений: *{total:,}* {total_arrow}\n\n"
-        f"🏆 *Топ 5 марок:*\n{top3_ru}\n\n"
-        f"📉 *Изменение цены за год:*\n{yoy_ru}\n\n"
+        f"📋 Всего объявлений: *{total:,}*\n\n"
+        f"🏆 *Топ 5 марок и самые популярные модели:*\n\n"
+        f"{ru_brands_text}\n\n"
         f"💡 _Сколько стоит ваша машина сейчас?_\n"
         f"👉 @MVehicleBot — бесплатная оценка за 30 секунд"
     )

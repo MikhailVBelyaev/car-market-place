@@ -1,4 +1,4 @@
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Min, Max, Q
 from rest_framework import serializers
 from django.db.models.functions import TruncDate, TruncMonth
 from rest_framework.views import APIView
@@ -673,45 +673,88 @@ class WeeklyDigest(APIView):
     def get(self, request):
         now        = timezone.now()
         since      = now - timedelta(days=7)
-        prev_since = since - timedelta(days=7)
-
-        total      = Car.objects.filter(created_at__gte=since).count()
-        prev_total = Car.objects.filter(created_at__gte=prev_since, created_at__lt=since).count()
-
-        top_brands = [
-            {'brand': r['brand'], 'count': r['count'], 'avg_price': round(float(r['avg_price']))}
-            for r in Car.objects.filter(created_at__gte=since, price__gt=0)
-                .values('brand')
-                .annotate(count=Count('car_id'), avg_price=Avg('price'))
-                .order_by('-count')[:10]
-        ]
-
-        # Year-over-year avg price for top 5 brands
-        top5 = [b['brand'] for b in top_brands[:5]]
         since_year = now - timedelta(days=365)
-        yoy = {}
-        for brand in top5:
-            qs_now  = Car.objects.filter(brand=brand, created_at__gte=since, price__gt=0)
-            qs_year = Car.objects.filter(
-                brand=brand,
-                created_at__gte=since_year,
-                created_at__lt=since_year + timedelta(days=7),
-                price__gt=0,
-            )
-            avg_now  = qs_now.aggregate(a=Avg('price'))['a']
-            avg_year = qs_year.aggregate(a=Avg('price'))['a']
-            if avg_now and avg_year:
-                yoy[brand] = {
-                    'now':     round(float(avg_now)),
-                    'year_ago': round(float(avg_year)),
-                    'change_pct': round((float(avg_now) - float(avg_year)) / float(avg_year) * 100, 1),
-                }
+        year_window = timedelta(days=30)  # wider window for year-ago comparison
 
-        total_change_pct = round((total - prev_total) / prev_total * 100, 1) if prev_total else None
+        total = Car.objects.filter(created_at__gte=since).count()
+
+        brand_rows = (
+            Car.objects.filter(created_at__gte=since, price__gt=0)
+            .values('brand')
+            .annotate(count=Count('car_id'), avg_price=Avg('price'))
+            .order_by('-count')[:10]
+        )
+
+        top_brands = []
+        for row in brand_rows:
+            brand_name = row['brand']
+
+            # Top 5 models for this brand: count + min/max/avg price
+            model_rows = (
+                Car.objects.filter(brand=brand_name, created_at__gte=since, price__gt=0)
+                .values('model')
+                .annotate(
+                    count=Count('car_id'),
+                    avg_price=Avg('price'),
+                    min_price=Min('price'),
+                    max_price=Max('price'),
+                )
+                .order_by('-count')[:5]
+            )
+
+            models = []
+            for m in model_rows:
+                model_name = m['model']
+                avg_p = float(m['avg_price'])
+
+                # Outlier-filtered min/max: exclude prices outside 0.25x–4x the average
+                qs_clean = Car.objects.filter(
+                    brand=brand_name, model=model_name,
+                    created_at__gte=since, price__gt=0,
+                    price__gte=avg_p * 0.25,
+                    price__lte=avg_p * 4,
+                )
+                clean_agg = qs_clean.aggregate(mn=Min('price'), mx=Max('price'))
+                min_price = round(float(clean_agg['mn'])) if clean_agg['mn'] else round(avg_p)
+                max_price = round(float(clean_agg['mx'])) if clean_agg['mx'] else round(avg_p)
+
+                # YoY: same brand+model, now vs ~1 year ago
+                qs_year = Car.objects.filter(
+                    brand=brand_name, model=model_name,
+                    created_at__gte=since_year,
+                    created_at__lt=since_year + year_window,
+                    price__gt=0,
+                )
+                qs_now = Car.objects.filter(
+                    brand=brand_name, model=model_name,
+                    created_at__gte=since, price__gt=0,
+                )
+                avg_now  = qs_now.aggregate(a=Avg('price'))['a']
+                avg_year = qs_year.aggregate(a=Avg('price'))['a']
+                yoy_pct = None
+                year_ago_price = None
+                if avg_now and avg_year:
+                    yoy_pct = round((float(avg_now) - float(avg_year)) / float(avg_year) * 100, 1)
+                    year_ago_price = round(float(avg_year))
+
+                models.append({
+                    'model':          model_name,
+                    'count':          m['count'],
+                    'avg_price':      round(avg_p),
+                    'min_price':      min_price,
+                    'max_price':      max_price,
+                    'yoy_pct':        yoy_pct,
+                    'year_ago_price': year_ago_price,
+                })
+
+            top_brands.append({
+                'brand':     brand_name,
+                'count':     row['count'],
+                'avg_price': round(float(row['avg_price'])),
+                'models':    models,
+            })
+
         return Response({
-            'total_listings':      total,
-            'prev_total_listings': prev_total,
-            'total_change_pct':    total_change_pct,
-            'top_brands':          top_brands,
-            'yoy_price_change':    yoy,
+            'total_listings': total,
+            'top_brands':     top_brands,
         })

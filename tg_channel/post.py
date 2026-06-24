@@ -62,7 +62,7 @@ def main():
 
     if args.dry_run:
         logger.info("DRY RUN — would post to %s", CHANNEL_ID)
-        logger.info("Caption preview:\n%s", caption[:600])
+        print("\n" + caption + "\n")
         chart_buf.seek(0)
         out_path = f'/tmp/channel_{args.post_type}.png'
         with open(out_path, 'wb') as f:
