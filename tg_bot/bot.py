@@ -34,6 +34,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from admin_panel import (
+    admin_start, admin_check_password, admin_callback, ADMIN_AUTH,
+)
+
 load_dotenv()
 BOT_TOKEN           = os.getenv("BOT_TOKEN")
 ML_API_URL          = os.getenv("ML_API_URL",          "http://ml_api:8500")
@@ -928,6 +932,7 @@ async def post_init(app):
         BotCommand("forecast", "📉 3-year value forecast"),
         BotCommand("fotos",    "📸 Analyze car photos"),
         BotCommand("check",    "✅ Submit photos for analysis"),
+        BotCommand("admin",    "🔧 Admin panel (auth required)"),
         BotCommand("cancel",   "❌ Cancel"),
     ])
 
@@ -972,12 +977,24 @@ def main():
         allow_reentry=True,
     )
 
+    admin_conv = ConversationHandler(
+        entry_points=[CommandHandler("admin", admin_start)],
+        states={
+            ADMIN_AUTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_check_password)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True,
+    )
+
     app.add_handler(price_conv)
     app.add_handler(photo_conv)
     app.add_handler(compare_conv)
+    app.add_handler(admin_conv)
     app.add_handler(CommandHandler("forecast", forecast))
     # Catch "Check it" presses that arrive outside an active conversation
     app.add_handler(CallbackQueryHandler(check_button, pattern="^check_now$"))
+    # Admin panel inline button callbacks
+    app.add_handler(CallbackQueryHandler(admin_callback, pattern="^adm_"))
 
     logger.info("Bot started — polling.")
     app.run_polling()

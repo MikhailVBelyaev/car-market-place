@@ -762,3 +762,191 @@ class WeeklyDigest(APIView):
             'total_listings': total,
             'top_brands':     top_brands,
         })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Admin / channel post config
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PostConfig(APIView):
+    """GET all channel post configs; PATCH {post_type} to toggle enabled."""
+    def get(self, request):
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT post_type, name, description, enabled, schedule,
+                       to_char(last_posted, 'DD.MM.YYYY HH24:MI') AS last_posted
+                FROM marketplace.channel_post_config
+                ORDER BY enabled DESC, post_type
+            """)
+            cols = [c[0] for c in cur.description]
+            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        return Response(rows)
+
+    def patch(self, request, post_type):
+        enabled = request.data.get('enabled')
+        if enabled is None:
+            return Response({'error': 'enabled required'}, status=400)
+        with connection.cursor() as cur:
+            cur.execute("""
+                UPDATE marketplace.channel_post_config
+                SET enabled = %s WHERE post_type = %s
+                RETURNING post_type, enabled
+            """, [bool(enabled), post_type])
+            result = cur.fetchone()
+        if not result:
+            return Response({'error': 'not found'}, status=404)
+        return Response({'post_type': result[0], 'enabled': result[1]})
+
+
+class ColorPremium(APIView):
+    def get(self, request):
+        since = timezone.now() - timedelta(days=30)
+        qs = Car.objects.filter(created_at__gte=since, price__gt=0).exclude(color__in=['', None])
+        overall = qs.aggregate(a=Avg('price'))['a']
+        rows = (qs.values('color')
+                  .annotate(count=Count('car_id'), avg_price=Avg('price'))
+                  .filter(count__gte=15)
+                  .order_by('-avg_price')[:8])
+        colors = []
+        for r in rows:
+            avg = float(r['avg_price'])
+            pct = round((avg - float(overall)) / float(overall) * 100, 1) if overall else 0
+            colors.append({'color': r['color'], 'count': r['count'],
+                           'avg_price': round(avg), 'vs_market_pct': pct})
+        return Response({'colors': colors, 'market_avg': round(float(overall)) if overall else 0})
+
+
+class GearPremium(APIView):
+    def get(self, request):
+        since = timezone.now() - timedelta(days=30)
+        top_brands = [r['brand'] for r in (
+            Car.objects.filter(created_at__gte=since, price__gt=0)
+            .values('brand').annotate(c=Count('car_id')).order_by('-c')[:6]
+        )]
+        brands_data = []
+        for brand in top_brands:
+            qs = Car.objects.filter(brand=brand, created_at__gte=since, price__gt=0)
+            at = qs.filter(gear_type='Automatic').aggregate(a=Avg('price'), c=Count('car_id'))
+            mt = qs.filter(gear_type='Manual').aggregate(a=Avg('price'), c=Count('car_id'))
+            if at['a'] and mt['a'] and at['c'] >= 3 and mt['c'] >= 3:
+                brands_data.append({
+                    'brand': brand,
+                    'at_price': round(float(at['a'])), 'at_count': at['c'],
+                    'mt_price': round(float(mt['a'])), 'mt_count': mt['c'],
+                    'premium_pct': round((float(at['a']) - float(mt['a'])) / float(mt['a']) * 100, 1),
+                })
+        return Response({'brands': sorted(brands_data, key=lambda x: abs(x['premium_pct']), reverse=True)})
+
+
+class AgeDepreciation(APIView):
+    def get(self, request):
+        top_brands = ['Chevrolet', 'BYD', 'Hyundai']
+        result = []
+        for brand in top_brands:
+            years_qs = (
+                Car.objects.filter(brand=brand, price__gt=0, year__gte=2010, year__lte=2025)
+                .values('year')
+                .annotate(count=Count('car_id'), avg_price=Avg('price'))
+                .filter(count__gte=5)
+                .order_by('year')
+            )
+            result.append({'brand': brand, 'years': [
+                {'year': r['year'], 'count': r['count'], 'avg_price': round(float(r['avg_price']))}
+                for r in years_qs
+            ]})
+        return Response({'brands': result})
+
+
+class BestValue(APIView):
+    def get(self, request):
+        since = timezone.now() - timedelta(days=7)
+        with connection.cursor() as cur:
+            cur.execute("""
+                WITH model_stats AS (
+                    SELECT brand, model, year,
+                           PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price) AS p25,
+                           AVG(price) AS avg_price, COUNT(*) AS cnt
+                    FROM marketplace.cars
+                    WHERE created_at >= %s AND price > 0
+                    GROUP BY brand, model, year HAVING COUNT(*) >= 5
+                )
+                SELECT c.brand, c.model, c.year, c.price::int, c.mileage,
+                       ms.avg_price::int, ms.p25::int,
+                       ROUND((ms.avg_price - c.price) / ms.avg_price * 100, 1) AS discount_pct
+                FROM marketplace.cars c
+                JOIN model_stats ms USING (brand, model, year)
+                WHERE c.created_at >= %s AND c.price > 0 AND c.price <= ms.p25
+                ORDER BY discount_pct DESC LIMIT 10
+            """, [since, since])
+            cols = [c[0] for c in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        return Response({'listings': rows, 'period_days': 7})
+
+
+class SeasonalTrends(APIView):
+    def get(self, request):
+        top_brands = ['Chevrolet', 'BYD', 'Hyundai']
+        result = []
+        for brand in top_brands:
+            months_qs = (
+                Car.objects.filter(brand=brand, price__gt=0)
+                .annotate(month=TruncMonth('created_at'))
+                .values('month')
+                .annotate(avg_price=Avg('price'), count=Count('car_id'))
+                .filter(count__gte=5)
+                .order_by('month')
+            )
+            result.append({'brand': brand, 'months': [
+                {'month': r['month'].strftime('%Y-%m'),
+                 'avg_price': round(float(r['avg_price'])), 'count': r['count']}
+                for r in months_qs
+            ]})
+        return Response({'brands': result})
+
+
+class MarketBreadth(APIView):
+    def get(self, request):
+        since = timezone.now() - timedelta(days=7)
+        bands = [
+            ('Under $5k',   0,     5000),
+            ('$5k-$10k',   5000,  10000),
+            ('$10k-$20k', 10000,  20000),
+            ('$20k-$30k', 20000,  30000),
+            ('Over $30k',  30000, 9999999),
+        ]
+        result = []
+        for label, low, high in bands:
+            count = Car.objects.filter(
+                created_at__gte=since, price__gt=low, price__lte=high).count()
+            result.append({'label': label, 'count': count, 'low': low, 'high': high})
+        total = sum(b['count'] for b in result)
+        for b in result:
+            b['pct'] = round(b['count'] / total * 100, 1) if total else 0
+        return Response({'bands': result, 'total': total})
+
+
+class MileageDepreciation(APIView):
+    def get(self, request):
+        top_models = [
+            ('Chevrolet', 'Lacetti'), ('Chevrolet', 'Cobalt'), ('Chevrolet', 'Spark'),
+            ('BYD', 'Song'), ('Hyundai', 'Elantra'), ('Kia', 'Sportage'),
+        ]
+        result = []
+        for brand, model in top_models:
+            rows = list(
+                Car.objects.filter(brand=brand, model=model, price__gt=0, mileage__gt=0)
+                .values_list('price', 'mileage')
+            )
+            if len(rows) < 15:
+                continue
+            prices = [float(r[0]) for r in rows]
+            kms    = [float(r[1]) for r in rows]
+            n = len(rows)
+            mp, mk = sum(prices)/n, sum(kms)/n
+            cov = sum((p-mp)*(k-mk) for p,k in zip(prices,kms)) / n
+            var = sum((k-mk)**2 for k in kms) / n
+            slope = cov/var if var > 0 else 0
+            result.append({'brand': brand, 'model': model,
+                           'price_per_10k_km': round(slope * 10000),
+                           'count': n, 'avg_price': round(mp)})
+        return Response({'models': sorted(result, key=lambda x: x['price_per_10k_km'])})
