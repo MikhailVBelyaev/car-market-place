@@ -110,6 +110,34 @@ services:
         condition: service_healthy
     restart: always
 
+  scraper_apartments:
+    build:
+      context: ./scraper
+    command: python scrape_apartments.py
+    environment:
+      - DJANGO_URL=http://django:8000
+    depends_on:
+      django:
+        condition: service_healthy
+    restart: "no"
+    profiles:
+      - scrape_apartments
+    # Usage: docker compose -f docker-compose.devlocal.yml -p car-dev --profile scrape_apartments run --rm scraper_apartments
+
+  scraper_electronics:
+    build:
+      context: ./scraper
+    command: python scrape_electronics.py
+    environment:
+      - DJANGO_URL=http://django:8000
+    depends_on:
+      django:
+        condition: service_healthy
+    restart: "no"
+    profiles:
+      - scrape_electronics
+    # Usage: docker compose -f docker-compose.devlocal.yml -p car-dev --profile scrape_electronics run --rm scraper_electronics
+
   tg_channel:
     build:
       context: ./tg_channel

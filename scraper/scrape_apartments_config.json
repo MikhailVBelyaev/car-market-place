@@ -1,0 +1,9 @@
+{
+  "categories": [
+    {"name": "apartments", "url": "https://www.olx.uz/nedvizhimost/kvartiry/", "max_pages": 50},
+    {"name": "houses", "url": "https://www.olx.uz/nedvizhimost/doma-dachi-kottedzhi/", "max_pages": 20}
+  ],
+  "django_api_url": "http://django:8000",
+  "sleep_between_requests": 1.5,
+  "max_retries": 3
+}

@@ -1,0 +1,11 @@
+{
+  "categories": [
+    {"name": "gpu", "url": "https://www.olx.uz/elektronika/kompyutery-i-komplektuyuschie/videokarty/", "max_pages": 10},
+    {"name": "iphone", "url": "https://www.olx.uz/elektronika/telefony-i-aksessuary/mobilnye-telefony-smartfony/?search[filter_enum_brand][0]=apple", "max_pages": 30},
+    {"name": "macbook", "url": "https://www.olx.uz/elektronika/noutbuki-i-aksessuary/noutbuki/?search[filter_enum_brand][0]=apple", "max_pages": 15},
+    {"name": "ipad", "url": "https://www.olx.uz/elektronika/telefony-i-aksessuary/planshety/?search[filter_enum_brand][0]=apple", "max_pages": 10}
+  ],
+  "django_api_url": "http://django:8000",
+  "sleep_between_requests": 1.5,
+  "max_retries": 3
+}

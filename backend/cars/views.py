@@ -5,8 +5,8 @@ from django.db.models.functions import TruncDate, TruncMonth
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Car
-from .serializers import CarSerializer
+from .models import Car, Apartment, Electronics
+from .serializers import CarSerializer, ApartmentSerializer, ElectronicsSerializer
 import logging
 from datetime import datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
@@ -48,6 +48,59 @@ class CarList(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ApartmentList(APIView):
+    """List real estate listings, or upsert one (POST from the scraper).
+
+    Mirrors CarList: a POST with an ad_id that already exists returns 200
+    'exists' rather than failing the PK constraint, so the scraper can treat
+    both 200 and 201 as success (ON CONFLICT DO NOTHING semantics).
+    """
+    def get(self, request):
+        ad_id = request.query_params.get("ad_id")
+        property_type = request.query_params.get("property_type")
+        qs = Apartment.objects.all()
+        if ad_id:
+            qs = qs.filter(ad_id=ad_id)
+        if property_type:
+            qs = qs.filter(property_type=property_type)
+        serializer = ApartmentSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        ad_id = request.data.get('ad_id')
+        if ad_id and Apartment.objects.filter(ad_id=ad_id).exists():
+            return Response({'status': 'exists', 'ad_id': ad_id}, status=status.HTTP_200_OK)
+        serializer = ApartmentSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ElectronicsList(APIView):
+    """List electronics listings, or upsert one (POST from the scraper)."""
+    def get(self, request):
+        ad_id = request.query_params.get("ad_id")
+        category = request.query_params.get("category")
+        qs = Electronics.objects.all()
+        if ad_id:
+            qs = qs.filter(ad_id=ad_id)
+        if category:
+            qs = qs.filter(category=category)
+        serializer = ElectronicsSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        ad_id = request.data.get('ad_id')
+        if ad_id and Electronics.objects.filter(ad_id=ad_id).exists():
+            return Response({'status': 'exists', 'ad_id': ad_id}, status=status.HTTP_200_OK)
+        serializer = ElectronicsSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class FuelTypeSummary(APIView):
     def get(self, request):

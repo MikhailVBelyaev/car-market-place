@@ -3,10 +3,13 @@ from .views import (CarList, CarDetail, FuelTypeSummary, CarFiltersSummary, CarF
                     DropdownOptions, BrandModels, PriceHistory, SmartPrice,
                     BrandRanking, PriceMovers, WeeklyDigest,
                     PostConfig, ColorPremium, GearPremium, AgeDepreciation,
-                    BestValue, SeasonalTrends, MarketBreadth, MileageDepreciation)
+                    BestValue, SeasonalTrends, MarketBreadth, MileageDepreciation,
+                    ApartmentList, ElectronicsList)
 
 urlpatterns = [
     path('cars/', CarList.as_view(), name='car-list'),
+    path('apartments/', ApartmentList.as_view(), name='apartment-list'),
+    path('electronics/', ElectronicsList.as_view(), name='electronics-list'),
     path('cars/<int:pk>/', CarDetail.as_view(), name='car-detail'),
     path('cars/fuel-type-summary/', FuelTypeSummary.as_view()),
     path('cars/filters-summary/', CarFiltersSummary.as_view(), name='filters-summary'),
