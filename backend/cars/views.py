@@ -8,11 +8,36 @@ from rest_framework import status
 from .models import Car, Apartment, Electronics
 from .serializers import CarSerializer, ApartmentSerializer, ElectronicsSerializer
 import logging
+import urllib.request
+import json as _json
 from datetime import datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
 
-# Set up logging
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Live USD/UZS rate from Central Bank of Uzbekistan, cached 24 h
+# ---------------------------------------------------------------------------
+_uzs_rate_cache: dict = {'rate': 12800, 'fetched_at': None}
+
+def _get_uzs_rate() -> float:
+    cache = _uzs_rate_cache
+    now = datetime.now(dt_timezone.utc)
+    if cache['fetched_at'] and (now - cache['fetched_at']).total_seconds() < 86400:
+        return cache['rate']
+    try:
+        with urllib.request.urlopen(
+            'https://cbu.uz/en/arkhiv-kursov-valyut/json/USD/', timeout=4
+        ) as resp:
+            data = _json.loads(resp.read())
+            rate = float(data[0]['Rate'])
+            cache['rate'] = rate
+            cache['fetched_at'] = now
+            logger.info(f'UZS rate refreshed: 1 USD = {rate} UZS')
+            return rate
+    except Exception as e:
+        logger.warning(f'UZS rate fetch failed ({e}), using cached {cache["rate"]}')
+        return cache['rate']
 
 class CarShortSerializer(serializers.ModelSerializer):
     created_at = serializers.SerializerMethodField()
@@ -94,6 +119,7 @@ class ElectronicsList(APIView):
     def post(self, request):
         ad_id = request.data.get('ad_id')
         if ad_id and Electronics.objects.filter(ad_id=ad_id).exists():
+            Electronics.objects.filter(ad_id=ad_id).update(scraped_at=timezone.now())
             return Response({'status': 'exists', 'ad_id': ad_id}, status=status.HTTP_200_OK)
         serializer = ElectronicsSerializer(data=request.data)
         if serializer.is_valid():
@@ -892,69 +918,155 @@ class GearPremium(APIView):
 
 
 class AgeDepreciation(APIView):
+    """Depreciation curve for a SINGLE model — median price by model-year.
+
+    Why per-model, not per-brand: averaging a Chevrolet Tahoe and a Spark of
+    the same year together is meaningless. A curve is only interpretable for
+    one model. Uses MEDIAN (robust to outliers) and a junk filter.
+
+    Query params:
+      brand, model  — if given, returns that model's curve
+      (default)     — returns curves for a set of high-volume popular models
+    """
+    DEFAULT_MODELS = [
+        ('Chevrolet', 'Cobalt'), ('Chevrolet', 'Nexia'), ('Chevrolet', 'Malibu'),
+        ('Chevrolet', 'Lacetti'), ('Chevrolet', 'Onix'),
+    ]
+
+    def _curve(self, brand, model):
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT year,
+                       COUNT(*) AS cnt,
+                       ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price))::int AS median_price
+                FROM marketplace.cars
+                WHERE brand = %s AND model = %s
+                  AND price BETWEEN 1500 AND 200000
+                  AND mileage BETWEEN 0 AND 400000
+                  AND year BETWEEN 2010 AND 2025
+                GROUP BY year
+                HAVING COUNT(*) >= 10
+                ORDER BY year
+            """, [brand, model])
+            years = [
+                {'year': r[0], 'count': r[1], 'median_price': r[2]}
+                for r in cur.fetchall()
+            ]
+        return years
+
     def get(self, request):
-        top_brands = ['Chevrolet', 'BYD', 'Hyundai']
+        brand = request.query_params.get('brand')
+        model = request.query_params.get('model')
+        if brand and model:
+            pairs = [(brand, model)]
+        else:
+            pairs = self.DEFAULT_MODELS
         result = []
-        for brand in top_brands:
-            years_qs = (
-                Car.objects.filter(brand=brand, price__gt=0, year__gte=2010, year__lte=2025)
-                .values('year')
-                .annotate(count=Count('car_id'), avg_price=Avg('price'))
-                .filter(count__gte=5)
-                .order_by('year')
-            )
-            result.append({'brand': brand, 'years': [
-                {'year': r['year'], 'count': r['count'], 'avg_price': round(float(r['avg_price']))}
-                for r in years_qs
-            ]})
-        return Response({'brands': result})
+        for b, m in pairs:
+            years = self._curve(b, m)
+            if len(years) >= 3:
+                first, last = years[0], years[-1]
+                span = last['year'] - first['year']
+                drop_pct = (
+                    round((last['median_price'] - first['median_price'])
+                          / last['median_price'] * 100)
+                    if last['median_price'] else None
+                )
+                result.append({
+                    'brand': b, 'model': m, 'years': years,
+                    'span_years': span, 'total_drop_pct': drop_pct,
+                })
+        return Response({'models': result})
 
 
 class BestValue(APIView):
+    """Genuinely underpriced listings this week.
+
+    Correctness safeguards (vs the old naive version that surfaced wrecks and
+    down-payment scams):
+      - Peers are matched on {brand, model, year, MILEAGE BAND}, not just year,
+        so a high-mileage car isn't flagged "cheap" against low-mileage peers.
+      - Compares against the peer MEDIAN (robust), requires >= 15 peers.
+      - Junk filter: price 2000-150000, mileage 1000-300000 (drops typos,
+        parts cars, and "first instalment" scam prices).
+      - Discount is capped: a real private deal is ~15-35% under median.
+        Anything cheaper than DISCOUNT_CAP is almost always an instalment
+        down-payment or a damaged car, so it is excluded, not celebrated.
+    """
+    DISCOUNT_FLOOR = 12   # must be at least this % under peer median to qualify
+    DISCOUNT_CAP   = 38   # more than this % under median → almost certainly a scam
+
     def get(self, request):
         since = timezone.now() - timedelta(days=7)
         with connection.cursor() as cur:
             cur.execute("""
-                WITH model_stats AS (
-                    SELECT brand, model, year,
-                           PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price) AS p25,
-                           AVG(price) AS avg_price, COUNT(*) AS cnt
+                WITH clean AS (
+                    SELECT brand, model, year, price::int AS price, mileage,
+                           reference_url,
+                           width_bucket(mileage, 0, 300000, 6) AS km_band
                     FROM marketplace.cars
-                    WHERE created_at >= %s AND price > 0
-                    GROUP BY brand, model, year HAVING COUNT(*) >= 5
+                    WHERE created_at >= %s
+                      AND price BETWEEN 2000 AND 150000
+                      AND mileage BETWEEN 1000 AND 300000
+                ),
+                peer AS (
+                    SELECT brand, model, year, km_band,
+                           PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY price) AS med,
+                           COUNT(*) AS peers
+                    FROM clean
+                    GROUP BY brand, model, year, km_band
+                    HAVING COUNT(*) >= 15
                 )
-                SELECT c.brand, c.model, c.year, c.price::int, c.mileage,
-                       ms.avg_price::int, ms.p25::int,
-                       ROUND((ms.avg_price - c.price) / ms.avg_price * 100, 1) AS discount_pct
-                FROM marketplace.cars c
-                JOIN model_stats ms USING (brand, model, year)
-                WHERE c.created_at >= %s AND c.price > 0 AND c.price <= ms.p25
-                ORDER BY discount_pct DESC LIMIT 10
-            """, [since, since])
+                SELECT c.brand, c.model, c.year, c.price, c.mileage,
+                       c.reference_url,
+                       p.med::int AS median_price,
+                       ROUND((p.med - c.price) / p.med * 100)::int AS discount_pct
+                FROM clean c
+                JOIN peer p USING (brand, model, year, km_band)
+                WHERE (p.med - c.price) / p.med * 100 BETWEEN %s AND %s
+                ORDER BY discount_pct DESC
+                LIMIT 10
+            """, [since, self.DISCOUNT_FLOOR, self.DISCOUNT_CAP])
             cols = [c[0] for c in cur.description]
             rows = [dict(zip(cols, r)) for r in cur.fetchall()]
         return Response({'listings': rows, 'period_days': 7})
 
 
 class SeasonalTrends(APIView):
+    """Cheapest / priciest month to buy a SINGLE model — monthly median.
+
+    Per-model (not per-brand) and MEDIAN so the trend reflects real price
+    level, not a shifting mix of models within a brand. Holding the model
+    fixed, month-to-month median movement is a genuine seasonal signal.
+
+    Query params: brand, model (default: a high-volume popular model).
+    """
     def get(self, request):
-        top_brands = ['Chevrolet', 'BYD', 'Hyundai']
-        result = []
-        for brand in top_brands:
-            months_qs = (
-                Car.objects.filter(brand=brand, price__gt=0)
-                .annotate(month=TruncMonth('created_at'))
-                .values('month')
-                .annotate(avg_price=Avg('price'), count=Count('car_id'))
-                .filter(count__gte=5)
-                .order_by('month')
-            )
-            result.append({'brand': brand, 'months': [
-                {'month': r['month'].strftime('%Y-%m'),
-                 'avg_price': round(float(r['avg_price'])), 'count': r['count']}
-                for r in months_qs
-            ]})
-        return Response({'brands': result})
+        brand = request.query_params.get('brand', 'Chevrolet')
+        model = request.query_params.get('model', 'Cobalt')
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
+                       COUNT(*) AS cnt,
+                       ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price))::int AS median_price
+                FROM marketplace.cars
+                WHERE brand = %s AND model = %s
+                  AND price BETWEEN 1500 AND 200000
+                  AND mileage BETWEEN 0 AND 400000
+                GROUP BY 1
+                HAVING COUNT(*) >= 15
+                ORDER BY 1
+            """, [brand, model])
+            months = [
+                {'month': r[0], 'count': r[1], 'median_price': r[2]}
+                for r in cur.fetchall()
+            ]
+        cheapest = min(months, key=lambda m: m['median_price']) if months else None
+        priciest = max(months, key=lambda m: m['median_price']) if months else None
+        return Response({
+            'brand': brand, 'model': model, 'months': months,
+            'cheapest_month': cheapest, 'priciest_month': priciest,
+        })
 
 
 class MarketBreadth(APIView):
@@ -1003,3 +1115,615 @@ class MileageDepreciation(APIView):
                            'price_per_10k_km': round(slope * 10000),
                            'count': n, 'avg_price': round(mp)})
         return Response({'models': sorted(result, key=lambda x: x['price_per_10k_km'])})
+
+
+class ScraperRunsView(APIView):
+    """
+    GET  /api/scraper-runs/          → latest run per scraper+category
+    POST /api/scraper-runs/          → start a new run, returns {id}
+    """
+    def get(self, request):
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT DISTINCT ON (scraper_name, COALESCE(category, ''))
+                    id, scraper_name, category,
+                    started_at, finished_at, status,
+                    pages_scraped, new_records, total_records, early_stopped, error_msg
+                FROM marketplace.scraper_runs
+                ORDER BY scraper_name, COALESCE(category, ''), started_at DESC
+            """)
+            cols = [c[0] for c in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        return Response(rows)
+
+    def post(self, request):
+        name = request.data.get('scraper_name', '')
+        cat  = request.data.get('category')
+        if not name:
+            return Response({'error': 'scraper_name required'}, status=400)
+        with connection.cursor() as cur:
+            cur.execute("""
+                INSERT INTO marketplace.scraper_runs (scraper_name, category, status)
+                VALUES (%s, %s, 'running') RETURNING id
+            """, [name, cat])
+            run_id = cur.fetchone()[0]
+        return Response({'id': run_id}, status=201)
+
+
+class ScraperRunDetailView(APIView):
+    """PATCH /api/scraper-runs/{id}/ → update progress or mark completed/error"""
+    def patch(self, request, run_id):
+        allowed = ('status', 'pages_scraped', 'new_records', 'total_records',
+                   'early_stopped', 'finished_at', 'error_msg')
+        fields = [(k, request.data[k]) for k in allowed if k in request.data]
+        if not fields:
+            return Response({'error': 'no fields'}, status=400)
+        set_clause = ', '.join(f"{k} = %s" for k, _ in fields)
+        values = [v for _, v in fields] + [run_id]
+        with connection.cursor() as cur:
+            cur.execute(
+                f"UPDATE marketplace.scraper_runs SET {set_clause} WHERE id = %s",
+                values,
+            )
+        return Response({'ok': True})
+
+
+import re as _re
+
+def _normalize_iphone_model(raw: str) -> str:
+    """iPhone 12Pro Max → iPhone 12 Pro Max."""
+    s = raw.strip()
+    s = _re.sub(r'(\d)(Pro|Mini|Plus|Max)', r'\1 \2', s)
+    s = _re.sub(r'(Pro)(Max)', r'\1 \2', s)
+    s = _re.sub(r'\s+', ' ', s)
+    return s
+
+
+def _normalize_macbook_model(raw: str) -> str:
+    """
+    Canonical form: MacBook [Air|Pro] [chip]
+      MacBook M1 PRO        → MacBook Pro M1
+      MacBook M2 PRO        → MacBook Pro M2
+      MacBook M3 MAX        → MacBook Pro M3 Max
+      MacBook M4 MAX        → MacBook Pro M4 Max
+      MacBook Air M1        → MacBook Air M1
+      MacBook Air M4 MAX    → MacBook Air M4 Max   (chip from specs)
+      MacBook Pro M4 PRO    → MacBook Pro M4 Pro   (chip from specs)
+      MacBook Pro M3 MAX    → MacBook Pro M3 Max
+      MacBook Air (Intel)   → MacBook Air (Intel)
+      MacBook Air M5        → MacBook Air M5
+    """
+    s = raw.strip()
+    # Title-case chip qualifiers ("M4 MAX" → "M4 Max", "M4 PRO" → "M4 Pro")
+    s = _re.sub(r'\bPRO\b', 'Pro', s)
+    s = _re.sub(r'\bMAX\b', 'Max', s)
+    # Bare-chip titles without Air/Pro segment default to the Pro line:
+    # "MacBook M1 Pro" / "MacBook M2 Pro" → "MacBook Pro M1/M2"
+    s = _re.sub(r'^MacBook\s+(M\d)\s+Pro$', r'MacBook Pro \1', s)
+    # "MacBook M3 Max" / "MacBook M4 Max" → "MacBook Pro M3/M4 Max"
+    s = _re.sub(r'^MacBook\s+(M\d)\s+Max$', r'MacBook Pro \1 Max', s)
+    # Uppercase a lowercase chip prefix recovered from a title ("m5" -> "M5")
+    s = _re.sub(r'\bm([1-9])\b', lambda m: 'M' + m.group(1), s)
+    s = _re.sub(r'\s+', ' ', s)
+    return s
+
+
+def _normalize_gpu_model(raw: str) -> str:
+    """
+    Canonical form: [GTX|RTX|RX] [number] [Ti|Super|XT]
+      RX580         → RX 580
+      RTX3060TI     → RTX 3060 Ti
+      GTX 1050 TI   → GTX 1050 Ti
+      RTX2060SUPER  → RTX 2060 Super
+      RX 5700XT     → RX 5700 XT
+      RX9070XT      → RX 9070 XT
+    """
+    s = raw.strip()
+    # Uppercase the series prefix
+    s = _re.sub(r'\b(gtx|rtx|rx)\b', lambda m: m.group().upper(), s, flags=_re.IGNORECASE)
+    # Insert space between series and number: "RTX3080" → "RTX 3080"
+    s = _re.sub(r'(GTX|RTX|RX)(\d)', r'\1 \2', s)
+    # Insert space between number and suffix: "3060TI" → "3060 TI"
+    s = _re.sub(r'(\d)(TI|SUPER|XT)\b', r'\1 \2', s, flags=_re.IGNORECASE)
+    # Normalise suffix case
+    s = _re.sub(r'\bTI\b',    'Ti',    s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\bSUPER\b', 'Super', s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\bxt\b',    'XT',    s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\s+', ' ', s)
+    return s
+
+
+def _normalize_ssd_model(raw: str) -> str:
+    """NVMe 512GB, SATA 1TB — keep interface + capacity."""
+    s = raw.strip().upper()
+    s = _re.sub(r'ГБ', 'GB', s)
+    s = _re.sub(r'ТБ', 'TB', s)
+    s = _re.sub(r'\bM\.2\b|\bPCIE\b', 'NVMe', s)
+    s = _re.sub(r'\s+', ' ', s)
+    return s.strip()
+
+
+def _normalize_ram_model(raw: str) -> str:
+    """Group by DDR generation + total capacity, stripping speeds (MHz).
+
+    DDR4 3200      → DDR4        (3200 is a speed, no GB suffix)
+    DDR4 3200 8GB  → DDR4 8GB    (strip speed, keep capacity)
+    DDR4 2         → DDR4        (truncated kit notation, no GB)
+    DDR4 2x8GB     → DDR4 16GB   (kit: 2 x 8 = 16)
+    DDR 3 8GB      → DDR3 8GB    (fix spurious space)
+    DDR5 5600      → DDR5        (5600 is a speed, no GB suffix)
+    """
+    s = raw.strip().upper()
+    s = s.replace('ГБ', 'GB').replace('МГЦ', 'MHZ')
+    # Fix "DDR 3" → "DDR3", "DDR 4" → "DDR4"
+    s = _re.sub(r'\bDDR\s+([2345])\b', r'DDR\1', s)
+    # Extract DDR generation
+    gen_m = _re.search(r'DDR([2345]?)', s)
+    gen = gen_m.group(1) if gen_m and gen_m.group(1) else ''
+    # Kit notation: 2x8GB → 16GB, 2x16GB → 32GB
+    kit = _re.search(r'(\d+)\s*[Xx]\s*(\d+)\s*GB', s)
+    if kit:
+        total = int(kit.group(1)) * int(kit.group(2))
+        if total <= 512:
+            return f"DDR{gen} {total}GB"
+    # Plain capacity: 8GB, 16GB — must be ≤512 to exclude speeds (1600/3200/5600)
+    cap = _re.search(r'(\d+)\s*GB', s)
+    if cap:
+        n = int(cap.group(1))
+        if n <= 512:
+            return f"DDR{gen} {n}GB"
+    # Fallback: just the generation type
+    return f"DDR{gen}" if gen else 'RAM'
+
+
+def _normalize_cpu_model(raw: str) -> str:
+    """Intel Core I5-12400 → Intel Core i5-12400 | AMD Ryzen 5 5600X → AMD Ryzen 5 5600X"""
+    s = raw.strip()
+    # Normalize iX casing: "I5-" or "I5 " → "i5-"
+    s = _re.sub(r'\bI([3579])([\s\-])', lambda m: f'i{m.group(1)}-', s)
+    # Also catch trailing "I5" with no separator followed by digits: "I5 12400" → "i5-12400"
+    s = _re.sub(r'\bi([3579])\s+(\d)', lambda m: f'i{m.group(1)}-{m.group(2)}', s)
+    # Uppercase the suffix letters after model number: "i7-14700kf"/"i7-14700Kf" → "i7-14700KF"
+    s = _re.sub(r'(i[3579]-\d{4,5})([A-Za-z]+)', lambda m: m.group(1) + m.group(2).upper(), s)
+    # Normalize Ryzen casing
+    s = _re.sub(r'\bRyzen\b', 'Ryzen', s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\bCore\b', 'Core', s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\bIntel\b', 'Intel', s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\bAMD\b', 'AMD', s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\s+', ' ', s)
+    return s.strip()
+
+
+def _normalize_console_model(raw: str) -> str:
+    """PlayStation 5 Slim → PlayStation 5 Slim, Xbox Series X → Xbox Series X"""
+    s = raw.strip()
+    # Expand PS4/PS5 shorthand
+    s = _re.sub(r'\bPS([345])\b', r'PlayStation \1', s, flags=_re.IGNORECASE)
+    s = _re.sub(r'\s+', ' ', s)
+    return s
+
+
+_NORMALIZERS = {
+    'iphone':  _normalize_iphone_model,
+    'macbook': _normalize_macbook_model,
+    'gpu':     _normalize_gpu_model,
+    'ram':     _normalize_ram_model,
+    'cpu':     _normalize_cpu_model,
+    'console': _normalize_console_model,
+    'ssd':     _normalize_ssd_model,
+}
+
+# Generic words that are too broad to be useful model names (per category)
+_SKIP_MODELS = {
+    'iphone':  {'iPhone', 'Apple'},
+    'macbook': {'MacBook', 'Apple'},
+    'gpu':     {'GPU', 'Видеокарта', 'video karta'},
+    'ipad':    {'iPad', 'Apple'},
+    'ram':     {'RAM', 'None', 'ОЗУ', 'DDR'},
+    'cpu':     {'CPU', 'None', 'Процессор', 'Intel Core', 'AMD Ryzen', 'AMD'},
+    'console': {'Console', 'None', 'Приставка', 'Игровая приставка'},
+    'ssd':     {'SSD', 'None'},
+}
+
+
+class ElectronicsReport(APIView):
+    """
+    GET /api/electronics/report/?category=iphone|macbook|gpu|ipad|ram|cpu
+    Returns models with p10–p90 price range and listing count.
+    """
+    MAX_USD   = {
+        'iphone':  4000,
+        'macbook': 6000,
+        'gpu':     3500,
+        'ipad':    2000,
+        'ram':     500,
+        'cpu':     2000,
+        'console': 1500,
+        'ssd':     800,
+    }
+    MIN_USD   = {
+        'iphone':  50,
+        'macbook': 50,
+        'gpu':     15,
+        'ipad':    50,
+        'ram':     5,
+        'cpu':     10,
+        'console': 20,
+        'ssd':     3,
+    }
+    MIN_COUNT = {
+        'iphone':  2,
+        'macbook': 2,
+        'gpu':     2,
+        'ipad':    2,
+        'ram':     3,
+        'cpu':     2,
+        'console': 2,
+        'ssd':     2,
+    }
+
+    def get(self, request):
+        uzs_rate  = _get_uzs_rate()
+        category  = request.query_params.get('category', 'iphone')
+        max_usd   = self.MAX_USD.get(category, 4000)
+        min_usd   = self.MIN_USD.get(category, 50)
+        min_count = self.MIN_COUNT.get(category, 2)
+        skip      = _SKIP_MODELS.get(category, set())
+        normalize = _NORMALIZERS.get(category, lambda x: x.strip())
+        try:
+            days = int(request.query_params.get('days', 0))
+        except (TypeError, ValueError):
+            days = 0
+        if days < 0:
+            days = 0
+
+        with connection.cursor() as cur:
+            cur.execute("""
+                WITH base AS (
+                    SELECT
+                        CASE
+                          -- 1) chip from structured specs (most reliable)
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                               AND specs IS NOT NULL
+                               AND specs->>'chip' IS NOT NULL
+                               AND specs->>'chip' != ''
+                          THEN model || ' ' || (specs->>'chip')
+                          -- 2) chip recovered from the title (e.g. M5 listings the
+                          --    scraper mislabelled as Intel) -> "MacBook Pro M5 [Pro|Max]"
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                               AND title ~* '\\mM[1-9]\\M'
+                          THEN model || ' '
+                               || upper(substring(title from '(?i)\\mM[1-9]\\M'))
+                               || COALESCE(
+                                    ' ' || initcap((regexp_match(
+                                        title, '(?i)M[1-9]\\s*(pro|max)'))[1]),
+                                    '')
+                          -- 3) genuinely Intel (no chip anywhere)
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                          THEN model || ' (Intel)'
+                          -- 4) RAM: model has no GB suffix but specs has capacity
+                          --    e.g. model='DDR4 3200', specs capacity_gb=8 → 'DDR4 8GB'
+                          --    Only when DDR generation is known AND capacity <= 64GB
+                          WHEN %s = 'ram'
+                               AND model NOT LIKE '%%GB'
+                               AND model NOT LIKE '%%ГБ'
+                               AND specs IS NOT NULL
+                               AND (specs->>'capacity_gb') IS NOT NULL
+                               AND (specs->>'capacity_gb')::int BETWEEN 1 AND 64
+                               AND (regexp_match(model, 'DDR\\s*([2-5])'))[1] IS NOT NULL
+                          THEN 'DDR' || (regexp_match(model, 'DDR\\s*([2-5])'))[1]
+                               || ' ' || (specs->>'capacity_gb')::int || 'GB'
+                          -- 5) CPU: resolve bare 'Intel Core'/'AMD Ryzen' labels.
+                          --    Prefer structured specs.model_id, then recover the
+                          --    model from the title (Core Ultra, iN-NNNN, Xeon).
+                          --    Anything still bare falls through to 'Intel Core'/
+                          --    'AMD Ryzen'/'AMD' and is dropped via _SKIP_MODELS['cpu'].
+                          WHEN %s = 'cpu'
+                               AND model IN ('Intel Core', 'AMD Ryzen', 'Intel Xeon', 'AMD')
+                          THEN CASE
+                                 WHEN specs IS NOT NULL
+                                      AND COALESCE(specs->>'model_id', '') != ''
+                                   THEN model || ' ' || (specs->>'model_id')
+                                 WHEN title ~* '\\multra\\s+[3579]\\s*[0-9]{3}'
+                                   THEN 'Intel Core Ultra '
+                                        || (regexp_match(title, '(?i)ultra\\s+([3579])\\s*([0-9]{3}[a-z]*)'))[1]
+                                        || ' '
+                                        || upper((regexp_match(title, '(?i)ultra\\s+([3579])\\s*([0-9]{3}[a-z]*)'))[2])
+                                 WHEN title ~* '\\mxeon\\M'
+                                   THEN 'Intel Xeon'
+                                 WHEN title ~* '\\mi[3579][\\s-]?[0-9]{4}'
+                                   THEN 'Intel Core i'
+                                        || (regexp_match(title, '(?i)\\mi([3579])[\\s-]?([0-9]{4,5}[a-z]*)'))[1]
+                                        || '-'
+                                        || upper((regexp_match(title, '(?i)\\mi([3579])[\\s-]?([0-9]{4,5}[a-z]*)'))[2])
+                                 ELSE model
+                               END
+                          ELSE model
+                        END AS model,
+                        CASE WHEN price_currency = 'USD' THEN price::numeric
+                             ELSE price::numeric / %s END AS price_usd,
+                        (
+                          lower(title) LIKE '%%разбит%%' OR lower(title) LIKE '%%слом%%' OR
+                          lower(title) LIKE '%%запчаст%%' OR lower(title) LIKE '%%ремонт%%' OR
+                          lower(title) LIKE '%%не работ%%' OR lower(title) LIKE '%%не включ%%' OR
+                          lower(title) LIKE '%%дефект%%'  OR lower(title) LIKE '%%трещин%%' OR
+                          lower(title) LIKE '%%поломк%%'  OR lower(title) LIKE '%%без дисплея%%' OR
+                          lower(title) LIKE '%%без аккумулятора%%' OR
+                          lower(title) LIKE '%%broken%%'  OR lower(title) LIKE '%%damaged%%' OR
+                          lower(title) LIKE '%%for parts%%' OR lower(title) LIKE '%%repair%%' OR
+                          lower(title) LIKE '%%defect%%'  OR
+                          lower(title) LIKE '%%buzilgan%%' OR lower(title) LIKE '%%singan%%' OR
+                          lower(title) LIKE '%%nosoz%%'   OR lower(title) LIKE '%%ehtiyot qism%%'
+                        ) AS is_damaged
+                    FROM marketplace.electronics
+                    WHERE category = %s
+                      AND model IS NOT NULL AND model != '' AND price > 0
+                      AND (%s = 0 OR scraped_at >= NOW() - INTERVAL '1 day' * %s)
+                ),
+                filtered AS (
+                    SELECT model, price_usd, is_damaged FROM base
+                    WHERE price_usd BETWEEN %s AND %s
+                )
+                SELECT model,
+                    is_damaged,
+                    COUNT(*)                                                       AS cnt,
+                    ROUND(MIN(price_usd))                                          AS raw_min,
+                    ROUND(MAX(price_usd))                                          AS raw_max,
+                    ROUND(PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY price_usd)) AS min_usd,
+                    ROUND(PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY price_usd)) AS max_usd,
+                    ROUND(AVG(price_usd))                                          AS avg_usd
+                FROM filtered
+                GROUP BY model, is_damaged
+                HAVING COUNT(*) >= %s
+                ORDER BY AVG(price_usd)
+            """, [category, category, category, category, category, uzs_rate, category,
+                  days, days, min_usd, max_usd, min_count])
+            cols = [c[0] for c in cur.description]
+            rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+        # Split normal vs damaged, normalise + merge duplicates, drop generic buckets
+        merged: dict[str, dict] = {}
+        damaged: dict[str, dict] = {}
+        for r in rows:
+            if r['model'] in skip:
+                continue
+            key = normalize(r['model'])
+            if r['is_damaged']:
+                # damaged listings: report raw min/max (full spread), not percentiles
+                d = damaged.setdefault(key, {'model': key, 'cnt': 0,
+                                             'min_usd': r['raw_min'],
+                                             'max_usd': r['raw_max']})
+                d['cnt']     += r['cnt']
+                d['min_usd']  = min(d['min_usd'], r['raw_min'])
+                d['max_usd']  = max(d['max_usd'], r['raw_max'])
+                continue
+            if key not in merged:
+                merged[key] = {'model': key, 'cnt': 0,
+                               'min_usd': r['min_usd'], 'max_usd': r['max_usd'],
+                               'avg_usd': r['avg_usd']}
+            m = merged[key]
+            m['cnt']     += r['cnt']
+            m['min_usd']  = min(m['min_usd'], r['min_usd'])
+            m['max_usd']  = max(m['max_usd'], r['max_usd'])
+            # recalculate avg as weighted average
+            total_old = m['cnt'] - r['cnt']
+            m['avg_usd'] = round(
+                (m['avg_usd'] * total_old + r['avg_usd'] * r['cnt']) / m['cnt']
+            ) if m['cnt'] else r['avg_usd']
+
+        result          = sorted(merged.values(),  key=lambda x: x['avg_usd'])
+        damaged_result  = sorted(damaged.values(), key=lambda x: x['min_usd'])
+
+        # Individual broken / for-parts listings (no count threshold) so they can
+        # be surfaced separately instead of disappearing into the aggregate. Uses
+        # the SAME damage keyword set as the base CTE above, so every listing that
+        # is excluded from the main report shows up here with its title and price.
+        with connection.cursor() as cur:
+            cur.execute("""
+                WITH with_chip AS (
+                    SELECT
+                        CASE
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                               AND specs IS NOT NULL
+                               AND specs->>'chip' IS NOT NULL
+                               AND specs->>'chip' != ''
+                          THEN model || ' ' || (specs->>'chip')
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                               AND title ~* '\\mM[1-9]\\M'
+                          THEN model || ' '
+                               || upper(substring(title from '(?i)\\mM[1-9]\\M'))
+                               || COALESCE(
+                                    ' ' || initcap((regexp_match(
+                                        title, '(?i)M[1-9]\\s*(pro|max)'))[1]),
+                                    '')
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                          THEN model || ' (Intel)'
+                          ELSE model
+                        END AS model,
+                        title,
+                        CASE WHEN price_currency = 'USD' THEN price::numeric
+                             ELSE price::numeric / %s END AS price_usd
+                    FROM marketplace.electronics
+                    WHERE category = %s
+                      AND model IS NOT NULL AND model != '' AND price > 0
+                      AND (%s = 0 OR scraped_at >= NOW() - INTERVAL '1 day' * %s)
+                      AND (
+                        lower(title) LIKE '%%разбит%%' OR lower(title) LIKE '%%слом%%' OR
+                        lower(title) LIKE '%%запчаст%%' OR lower(title) LIKE '%%ремонт%%' OR
+                        lower(title) LIKE '%%не работ%%' OR lower(title) LIKE '%%не включ%%' OR
+                        lower(title) LIKE '%%дефект%%'  OR lower(title) LIKE '%%трещин%%' OR
+                        lower(title) LIKE '%%поломк%%'  OR lower(title) LIKE '%%без дисплея%%' OR
+                        lower(title) LIKE '%%без аккумулятора%%' OR
+                        lower(title) LIKE '%%broken%%'  OR lower(title) LIKE '%%damaged%%' OR
+                        lower(title) LIKE '%%for parts%%' OR lower(title) LIKE '%%repair%%' OR
+                        lower(title) LIKE '%%defect%%'  OR
+                        lower(title) LIKE '%%buzilgan%%' OR lower(title) LIKE '%%singan%%' OR
+                        lower(title) LIKE '%%nosoz%%'   OR lower(title) LIKE '%%ehtiyot qism%%'
+                      )
+                )
+                SELECT model, title, ROUND(price_usd) AS price_usd
+                FROM with_chip
+                ORDER BY price_usd
+            """, [category, category, category, uzs_rate, category, days, days])
+            broken_rows = cur.fetchall()
+
+        broken_listings = [
+            {'model': normalize(r[0]), 'title': r[1], 'price_usd': int(r[2] or 0)}
+            for r in broken_rows
+        ]
+
+        return Response({'category': category,
+                         'models': result,
+                         'damaged_models': damaged_result,
+                         'broken_listings': broken_listings})
+
+
+class ElectronicsListings(APIView):
+    """
+    GET /api/electronics/listings/?category=macbook&model_label=MacBook+Air+M1&days=7&page=0
+
+    Returns paginated individual listings (title, price, source url) for one
+    display model, using the SAME chip-resolution + normalization + price-band +
+    damage filtering as ElectronicsReport, so the listing set matches the count
+    shown in the report.
+    """
+    PAGE_SIZE = 5
+
+    def get(self, request):
+        category    = request.query_params.get('category', 'iphone')
+        model_label = (request.query_params.get('model_label') or '').strip()
+        max_usd     = ElectronicsReport.MAX_USD.get(category, 4000)
+        min_usd     = ElectronicsReport.MIN_USD.get(category, 50)
+        uzs_rate    = _get_uzs_rate()
+        skip        = _SKIP_MODELS.get(category, set())
+        normalize   = _NORMALIZERS.get(category, lambda x: x.strip())
+
+        try:
+            days = int(request.query_params.get('days', 0))
+        except (TypeError, ValueError):
+            days = 0
+        if days < 0:
+            days = 0
+        try:
+            page = int(request.query_params.get('page', 0))
+        except (TypeError, ValueError):
+            page = 0
+        if page < 0:
+            page = 0
+
+        if not model_label:
+            return Response({'total': 0, 'page': 0, 'pages': 0, 'listings': []})
+
+        with connection.cursor() as cur:
+            cur.execute("""
+                WITH base AS (
+                    SELECT
+                        CASE
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                               AND specs IS NOT NULL
+                               AND specs->>'chip' IS NOT NULL
+                               AND specs->>'chip' != ''
+                          THEN model || ' ' || (specs->>'chip')
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                               AND title ~* '\\mM[1-9]\\M'
+                          THEN model || ' '
+                               || upper(substring(title from '(?i)\\mM[1-9]\\M'))
+                               || COALESCE(
+                                    ' ' || initcap((regexp_match(
+                                        title, '(?i)M[1-9]\\s*(pro|max)'))[1]),
+                                    '')
+                          WHEN %s = 'macbook'
+                               AND model IN ('MacBook Air', 'MacBook Pro')
+                          THEN model || ' (Intel)'
+                          -- CPU: resolve bare 'Intel Core'/'AMD Ryzen' labels — must
+                          -- match ElectronicsReport exactly (model_id, then title).
+                          WHEN %s = 'cpu'
+                               AND model IN ('Intel Core', 'AMD Ryzen', 'Intel Xeon', 'AMD')
+                          THEN CASE
+                                 WHEN specs IS NOT NULL
+                                      AND COALESCE(specs->>'model_id', '') != ''
+                                   THEN model || ' ' || (specs->>'model_id')
+                                 WHEN title ~* '\\multra\\s+[3579]\\s*[0-9]{3}'
+                                   THEN 'Intel Core Ultra '
+                                        || (regexp_match(title, '(?i)ultra\\s+([3579])\\s*([0-9]{3}[a-z]*)'))[1]
+                                        || ' '
+                                        || upper((regexp_match(title, '(?i)ultra\\s+([3579])\\s*([0-9]{3}[a-z]*)'))[2])
+                                 WHEN title ~* '\\mxeon\\M'
+                                   THEN 'Intel Xeon'
+                                 WHEN title ~* '\\mi[3579][\\s-]?[0-9]{4}'
+                                   THEN 'Intel Core i'
+                                        || (regexp_match(title, '(?i)\\mi([3579])[\\s-]?([0-9]{4,5}[a-z]*)'))[1]
+                                        || '-'
+                                        || upper((regexp_match(title, '(?i)\\mi([3579])[\\s-]?([0-9]{4,5}[a-z]*)'))[2])
+                                 ELSE model
+                               END
+                          ELSE model
+                        END AS model,
+                        title,
+                        url,
+                        scraped_at,
+                        CASE WHEN price_currency = 'USD' THEN price::numeric
+                             ELSE price::numeric / %s END AS price_usd,
+                        (
+                          lower(title) LIKE '%%разбит%%' OR lower(title) LIKE '%%слом%%' OR
+                          lower(title) LIKE '%%запчаст%%' OR lower(title) LIKE '%%ремонт%%' OR
+                          lower(title) LIKE '%%не работ%%' OR lower(title) LIKE '%%не включ%%' OR
+                          lower(title) LIKE '%%дефект%%'  OR lower(title) LIKE '%%трещин%%' OR
+                          lower(title) LIKE '%%поломк%%'  OR lower(title) LIKE '%%без дисплея%%' OR
+                          lower(title) LIKE '%%без аккумулятора%%' OR
+                          lower(title) LIKE '%%broken%%'  OR lower(title) LIKE '%%damaged%%' OR
+                          lower(title) LIKE '%%for parts%%' OR lower(title) LIKE '%%repair%%' OR
+                          lower(title) LIKE '%%defect%%'  OR
+                          lower(title) LIKE '%%buzilgan%%' OR lower(title) LIKE '%%singan%%' OR
+                          lower(title) LIKE '%%nosoz%%'   OR lower(title) LIKE '%%ehtiyot qism%%'
+                        ) AS is_damaged
+                    FROM marketplace.electronics
+                    WHERE category = %s
+                      AND model IS NOT NULL AND model != '' AND price > 0
+                      AND (%s = 0 OR scraped_at >= NOW() - INTERVAL '1 day' * %s)
+                )
+                SELECT model, title, url, scraped_at, ROUND(price_usd) AS price_usd
+                FROM base
+                WHERE NOT is_damaged
+                  AND price_usd BETWEEN %s AND %s
+                ORDER BY price_usd
+            """, [category, category, category, category, uzs_rate, category,
+                  days, days, min_usd, max_usd])
+            rows = cur.fetchall()
+
+        # Normalize + match to the requested display model (done in Python to
+        # mirror ElectronicsReport's normalization exactly).
+        matched = []
+        for raw_model, title, url, scraped_at, price_usd in rows:
+            if raw_model in skip:
+                continue
+            if normalize(raw_model) != model_label:
+                continue
+            matched.append({
+                'title': title or '',
+                'price_usd': int(price_usd or 0),
+                'source_url': url or '',
+                'scraped_at': scraped_at.isoformat() if scraped_at else None,
+            })
+
+        total = len(matched)
+        pages = (total + self.PAGE_SIZE - 1) // self.PAGE_SIZE if total else 0
+        if pages and page >= pages:
+            page = pages - 1
+        start = page * self.PAGE_SIZE
+        listings = matched[start:start + self.PAGE_SIZE]
+
+        return Response({
+            'total': total,
+            'page': page,
+            'pages': pages,
+            'listings': listings,
+        })

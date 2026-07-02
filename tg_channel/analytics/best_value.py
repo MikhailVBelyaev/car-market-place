@@ -21,17 +21,16 @@ def build_chart(data):
     fig, ax = plt.subplots(figsize=(11, 6), facecolor=BG)
     apply_base_style(fig, ax)
 
-    labels    = [f"{l['brand']} {l['model']}\n{l['year']}" for l in listings]
-    prices    = [l['price']       for l in listings]
-    avgs      = [l['avg_price']   for l in listings]
-    discounts = [l['discount_pct'] for l in listings]
+    labels    = [f"{l['brand']} {l['model']}\n{l['year']} · {l['mileage']//1000}k km" for l in listings]
+    prices    = [l['price']         for l in listings]
+    medians   = [l['median_price']  for l in listings]
     y         = list(range(len(labels)))
 
-    ax.barh(y, avgs,   color=GREY,  height=0.5, alpha=0.4, label="Market avg", zorder=2)
-    ax.barh(y, prices, color=GREEN, height=0.5, label="Listed price",          zorder=3)
+    ax.barh(y, medians, color=GREY,  height=0.5, alpha=0.4, label="Market median (same km band)", zorder=2)
+    ax.barh(y, prices,  color=GREEN, height=0.5, label="Listed price",                             zorder=3)
 
     for i, l in enumerate(listings):
-        ax.text(l['avg_price'] + 100, i, f"-{l['discount_pct']:.0f}%",
+        ax.text(l['median_price'] + 100, i, f"-{l['discount_pct']:.0f}%",
                 va='center', fontsize=8.5, color=RED, fontweight='bold')
 
     ax.set_yticks(y)
@@ -53,12 +52,12 @@ def build_text(data):
     listings = data['listings']
 
     uz_lines = '\n'.join(
-        f"  \U0001f49a {l['brand']} {l['model']} {l['year']}: ${l['price']:,} "
-        f"(bozor avg ${l['avg_price']:,}, -{l['discount_pct']:.0f}%)"
+        f"  \U0001f49a {l['brand']} {l['model']} {l['year']} ({l['mileage']//1000}k km): ${l['price']:,} "
+        f"(bozor mediana ${l['median_price']:,}, -{l['discount_pct']:.0f}%)"
         for l in listings[:5])
     ru_lines = '\n'.join(
-        f"  \U0001f49a {l['brand']} {l['model']} {l['year']}: ${l['price']:,} "
-        f"(rynok avg ${l['avg_price']:,}, -{l['discount_pct']:.0f}%)"
+        f"  \U0001f49a {l['brand']} {l['model']} {l['year']} ({l['mileage']//1000}k km): ${l['price']:,} "
+        f"(rynok mediana ${l['median_price']:,}, -{l['discount_pct']:.0f}%)"
         for l in listings[:5])
 
     return (

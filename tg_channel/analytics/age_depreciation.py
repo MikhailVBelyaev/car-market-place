@@ -15,18 +15,19 @@ def fetch(django_url):
 
 
 def build_chart(data):
-    brands = data['brands']
+    models = data['models']
     today  = date.today().strftime('%d.%m.%Y')
-    palette = [BLUE, GREEN, RED]
+    palette = [BLUE, GREEN, RED, '#F9A825', '#6A1B9A']
 
     fig, ax = plt.subplots(figsize=(11, 6), facecolor=BG)
     apply_base_style(fig, ax)
 
-    for i, b in enumerate(brands):
-        years  = [y['year']      for y in b['years']]
-        prices = [y['avg_price'] for y in b['years']]
+    for i, b in enumerate(models):
+        years  = [y['year']         for y in b['years']]
+        prices = [y['median_price'] for y in b['years']]
         color  = palette[i % len(palette)]
-        ax.plot(years, prices, marker='o', color=color, linewidth=2, label=b['brand'])
+        ax.plot(years, prices, marker='o', color=color, linewidth=2,
+                label=f"{b['brand']} {b['model']}")
         if prices:
             ax.annotate(f"${prices[-1]:,}", (years[-1], prices[-1]),
                         textcoords="offset points", xytext=(6, 0),
@@ -50,25 +51,25 @@ def build_chart(data):
 def build_text(data):
     today  = date.today().strftime('%d.%m.%Y')
     lines_uz, lines_ru = [], []
-    for b in data['brands']:
+    for b in data['models']:
         years = b['years']
         if len(years) >= 2:
             oldest = years[0]
             newest = years[-1]
-            drop   = round((oldest['avg_price'] - newest['avg_price']) / newest['avg_price'] * 100)
+            name   = f"{b['brand']} {b['model']}"
             lines_uz.append(
-                f"  {b['brand']}: {oldest['year']} ${oldest['avg_price']:,} → "
-                f"{newest['year']} ${newest['avg_price']:,} (+{drop}% yangi)")
+                f"  {name}: {oldest['year']} ${oldest['median_price']:,} → "
+                f"{newest['year']} ${newest['median_price']:,}")
             lines_ru.append(
-                f"  {b['brand']}: {oldest['year']} ${oldest['avg_price']:,} → "
-                f"{newest['year']} ${newest['avg_price']:,} (+{drop}% novee)")
+                f"  {name}: {oldest['year']} ${oldest['median_price']:,} → "
+                f"{newest['year']} ${newest['median_price']:,}")
 
     return (
         f"📅 *YIL BO'YICHA NARX · {today}*\n\n"
-        f"Yangi mashina qancha qimmatroq?\n" + '\n'.join(lines_uz) +
+        f"Mediana narx, ishlab chiqarilgan yil bo'yicha:\n" + '\n'.join(lines_uz) +
         "\n\n\U0001f449 @MVehicleBot\n\n━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📅 *TSENY PO GODU VYPUSKA · {today}*\n\n"
-        f"Naskol'ko novee = dorozhe?\n" + '\n'.join(lines_ru) +
+        f"Mediannaya tsena po godu vypuska:\n" + '\n'.join(lines_ru) +
         "\n\n\U0001f449 @MVehicleBot"
     )
 

@@ -15,35 +15,34 @@ def fetch(django_url):
 
 
 def build_chart(data):
-    brands  = data['brands']
-    today   = date.today().strftime('%d.%m.%Y')
-    palette = [BLUE, GREEN, RED]
+    months_data = data['months']
+    label       = f"{data['brand']} {data['model']}"
+    today       = date.today().strftime('%d.%m.%Y')
 
     fig, ax = plt.subplots(figsize=(12, 6), facecolor=BG)
     apply_base_style(fig, ax)
 
-    for i, b in enumerate(brands):
-        months = [m['month'][-5:] for m in b['months']]   # MM-DD style from YYYY-MM
-        prices = [m['avg_price']  for m in b['months']]
-        if len(months) < 2:
-            continue
-        color = palette[i % len(palette)]
-        ax.plot(range(len(months)), prices, marker='o', color=color, linewidth=2, label=b['brand'])
-        ax.fill_between(range(len(months)), prices, alpha=0.1, color=color)
+    prices = [m['median_price'] for m in months_data]
+    ax.plot(range(len(months_data)), prices, marker='o', color=BLUE, linewidth=2, label=label)
+    ax.fill_between(range(len(months_data)), prices, alpha=0.1, color=BLUE)
 
-    # x-axis labels from first brand's months
-    all_months = data['brands'][0]['months'] if data['brands'] else []
-    if all_months:
-        step = max(1, len(all_months) // 7)
-        ax.set_xticks(range(0, len(all_months), step))
+    # Mark cheapest / priciest month
+    if months_data:
+        lo = min(range(len(months_data)), key=lambda j: months_data[j]['median_price'])
+        hi = max(range(len(months_data)), key=lambda j: months_data[j]['median_price'])
+        ax.scatter([lo], [prices[lo]], color=GREEN, s=90, zorder=5)
+        ax.scatter([hi], [prices[hi]], color=RED,   s=90, zorder=5)
+
+        step = max(1, len(months_data) // 7)
+        ax.set_xticks(range(0, len(months_data), step))
         ax.set_xticklabels(
-            [all_months[j]['month'][-5:] for j in range(0, len(all_months), step)],
-            fontsize=8)
+            [months_data[j]['month'] for j in range(0, len(months_data), step)],
+            fontsize=8, rotation=40, ha='right')
 
     ax.set_title(
-        f"14 oylik narx tarixi / 14-mesyachnaya istoriya tsen  ·  {today}",
+        f"{label} · narx bo'yicha oy / tsena po mesyatsam  ·  {today}",
         fontsize=11, fontweight='bold', color='#212121')
-    ax.set_ylabel("O'rtacha narq ($) / Srednyaya tsena ($)", fontsize=8.5, color=GREY)
+    ax.set_ylabel("Mediana narq ($) / Mediannaya tsena ($)", fontsize=8.5, color=GREY)
     ax.legend(fontsize=10)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'${int(x):,}'))
 
@@ -56,24 +55,23 @@ def build_chart(data):
 
 def build_text(data):
     today = date.today().strftime('%d.%m.%Y')
-    lines_uz, lines_ru = [], []
-    for b in data['brands']:
-        months = b['months']
-        if len(months) >= 2:
-            lo = min(months, key=lambda m: m['avg_price'])
-            hi = max(months, key=lambda m: m['avg_price'])
-            lines_uz.append(
-                f"  {b['brand']}: eng arzon {lo['month']} (${lo['avg_price']:,}), "
-                f"eng qimmat {hi['month']} (${hi['avg_price']:,})")
-            lines_ru.append(
-                f"  {b['brand']}: deshevle vsego {lo['month']} (${lo['avg_price']:,}), "
-                f"dorozhe vsego {hi['month']} (${hi['avg_price']:,})")
+    label = f"{data['brand']} {data['model']}"
+    lo = data.get('cheapest_month')
+    hi = data.get('priciest_month')
+    if not lo or not hi:
+        return f"\U0001f321 *{label}* — ma'lumot yetarli emas / nedostatochno dannyh."
 
     return (
-        f"\U0001f321 *MAVSUMIIY NARXLAR · {today}*\n\nQachon arzon sotib olish mumkin?\n" +
-        '\n'.join(lines_uz) + "\n\n\U0001f449 @MVehicleBot\n\n━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"\U0001f321 *SEZONNYE TSENY · {today}*\n\nKogda vygodnee pokupat'?\n" +
-        '\n'.join(lines_ru) + "\n\n\U0001f449 @MVehicleBot"
+        f"\U0001f321 *QAYSI OYDA ARZON? · {today}*\n\n"
+        f"*{label}* — oylik mediana narx:\n"
+        f"  \U0001f7e2 Eng arzon: {lo['month']} — ${lo['median_price']:,}\n"
+        f"  \U0001f534 Eng qimmat: {hi['month']} — ${hi['median_price']:,}\n"
+        "\n\U0001f449 @MVehicleBot\n\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"\U0001f321 *В КАКОМ МЕСЯЦЕ ДЕШЕВЛЕ? · {today}*\n\n"
+        f"*{label}* — медианная цена по месяцам:\n"
+        f"  \U0001f7e2 Дешевле всего: {lo['month']} — ${lo['median_price']:,}\n"
+        f"  \U0001f534 Дороже всего: {hi['month']} — ${hi['median_price']:,}\n"
+        "\n\U0001f449 @MVehicleBot"
     )
 
 

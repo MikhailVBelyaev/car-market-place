@@ -11,6 +11,13 @@ logger = logging.getLogger(__name__)
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 DJANGO_URL     = os.getenv("DJANGO_URL", "http://django:8000")
 
+# Comma-separated list of Telegram user IDs that skip password auth.
+# Example in .env:  ADMIN_USER_IDS=123456789,987654321
+_raw_ids = os.getenv("ADMIN_USER_IDS", "")
+ADMIN_USER_IDS: set[int] = {
+    int(x.strip()) for x in _raw_ids.split(",") if x.strip().isdigit()
+}
+
 ADMIN_AUTH = 11  # ConversationHandler state
 
 POST_REGISTRY = [
@@ -82,7 +89,14 @@ def _build_keyboard(configs):
     return InlineKeyboardMarkup(rows)
 
 
+def _is_trusted(user_id: int) -> bool:
+    return user_id in ADMIN_USER_IDS
+
+
 async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_id = update.effective_user.id
+
+    # Already authenticated this session — show panel immediately.
     if context.user_data.get("admin_authed"):
         configs = _get_configs()
         kb = _build_keyboard(configs)
@@ -93,8 +107,21 @@ async def admin_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         return ConversationHandler.END
 
+    # Telegram ID is whitelisted — skip password entirely.
+    if _is_trusted(user_id):
+        context.user_data["admin_authed"] = True
+        configs = _get_configs()
+        kb = _build_keyboard(configs)
+        await update.message.reply_text(
+            "📡 *CHANNEL POST MANAGER*\n\n"
+            "Tap a post name to toggle on/off\nTap 👁 to preview data from DB",
+            parse_mode="Markdown", reply_markup=kb,
+        )
+        return ConversationHandler.END
+
+    # No whitelist entry — fall back to password.
     if not ADMIN_PASSWORD:
-        await update.message.reply_text("⚠️ ADMIN_PASSWORD not set.")
+        await update.message.reply_text("⛔ Access denied.")
         return ConversationHandler.END
 
     await update.message.reply_text("🔐 Enter admin password:")
@@ -220,30 +247,28 @@ def _format_preview(post_type, data):
                 lines.append(f"  {b['brand']}: AT ${b['at_price']:,} vs MT ${b['mt_price']:,} (+{b['premium_pct']:.1f}%)")
 
         elif post_type == "age_depreciation":
-            for b in data.get("brands", []):
+            for b in data.get("models", []):
                 yrs = b.get("years", [])
                 if len(yrs) >= 2:
-                    lines.append(f"\n{b['brand']}: {yrs[0]['year']} → {yrs[-1]['year']}")
+                    lines.append(f"\n{b['brand']} {b['model']}: {yrs[0]['year']} → {yrs[-1]['year']}")
                     for y in yrs[-4:]:
-                        lines.append(f"  {y['year']}: avg ${y['avg_price']:,}  ({y['count']} listings)")
+                        lines.append(f"  {y['year']}: median ${y['median_price']:,}  ({y['count']} listings)")
 
         elif post_type == "best_value":
             lst = data.get("listings", [])
-            lines.append(f"Found {len(lst)} underpriced listings this week:")
+            lines.append(f"Found {len(lst)} genuinely underpriced listings this week:")
             for l in lst[:5]:
                 lines.append(
-                    f"  {l['brand']} {l['model']} {l['year']}: ${l['price']:,}"
-                    f"  (market avg ${l['avg_price']:,}, -{l['discount_pct']:.0f}%)")
+                    f"  {l['brand']} {l['model']} {l['year']} ({l['mileage']//1000}k km): ${l['price']:,}"
+                    f"  (median ${l['median_price']:,}, -{l['discount_pct']:.0f}%)")
 
         elif post_type == "seasonal_trends":
-            for b in data.get("brands", []):
-                months = b.get("months", [])
-                if len(months) >= 2:
-                    lo = min(months, key=lambda m: m['avg_price'])
-                    hi = max(months, key=lambda m: m['avg_price'])
-                    lines.append(f"\n{b['brand']} ({len(months)} months):")
-                    lines.append(f"  Cheapest: {lo['month']} → ${lo['avg_price']:,}")
-                    lines.append(f"  Priciest: {hi['month']} → ${hi['avg_price']:,}")
+            lo = data.get("cheapest_month")
+            hi = data.get("priciest_month")
+            if lo and hi:
+                lines.append(f"\n{data.get('brand','')} {data.get('model','')} ({len(data.get('months', []))} months):")
+                lines.append(f"  Cheapest: {lo['month']} → ${lo['median_price']:,}")
+                lines.append(f"  Priciest: {hi['month']} → ${hi['median_price']:,}")
 
         elif post_type == "market_breadth":
             lines.append(f"Total this week: {data.get('total', 0):,}")
