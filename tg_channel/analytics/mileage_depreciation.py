@@ -47,15 +47,15 @@ def build_chart(data):
 def build_text(data):
     today  = date.today().strftime('%d.%m.%Y')
     models = data['models']
-    uz = '\n'.join(
-        f"  • {m['brand']} {m['model']}: ${abs(m['price_per_10k_km']):,.0f} / 10k km"
+    rows = '\n'.join(
+        f"  • *{m['brand']} {m['model']}*: -${abs(m['price_per_10k_km']):,.0f}"
         for m in models)
-    ru = uz
     return (
-        f"\U0001f697 *YURISH VA NARQ · {today}*\n\n10 000 km uchun narq pasayishi:\n{uz}"
-        "\n\n\U0001f449 @MVehicleBot\n\n━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"\U0001f697 *PROBEG I TSENA · {today}*\n\nPoterya tseny za 10 000 km:\n{ru}"
-        "\n\n\U0001f449 @MVehicleBot"
+        f"\U0001f697 *PROBEG = NARX / ПРОБЕГ = ЦЕНА* · {today}\n"
+        f"_har 10 000 km / за каждые 10 000 km:_\n\n"
+        f"{rows}\n\n"
+        f"\U0001f4a1 O'z narxingizni biling / Узнайте свою цену\n"
+        f"\U0001f449 @MVehicleBot"
     )
 
 

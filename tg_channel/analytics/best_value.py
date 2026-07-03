@@ -51,20 +51,18 @@ def build_text(data):
     today    = date.today().strftime('%d.%m.%Y')
     listings = data['listings']
 
-    uz_lines = '\n'.join(
-        f"  \U0001f49a {l['brand']} {l['model']} {l['year']} ({l['mileage']//1000}k km): ${l['price']:,} "
-        f"(bozor mediana ${l['median_price']:,}, -{l['discount_pct']:.0f}%)"
-        for l in listings[:5])
-    ru_lines = '\n'.join(
-        f"  \U0001f49a {l['brand']} {l['model']} {l['year']} ({l['mileage']//1000}k km): ${l['price']:,} "
-        f"(rynok mediana ${l['median_price']:,}, -{l['discount_pct']:.0f}%)"
+    # Language-neutral rows (car, price vs median, discount) shared by both blocks
+    rows = '\n'.join(
+        f"\U0001f49a *{l['brand']} {l['model']} {l['year']}* · {l['mileage']//1000}k km\n"
+        f"   ${l['price']:,}  vs  ${l['median_price']:,}  → *-{l['discount_pct']:.0f}%*"
         for l in listings[:5])
 
     return (
-        f"\U0001f48e *ARZON TAKLIFLAR · {today}*\n\nBu hafta bozordan arzon mashinalar:\n{uz_lines}"
-        "\n\n\U0001f4a1 _Narqni tekshirish:_ \U0001f449 @MVehicleBot\n\n━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"\U0001f48e *VYGODNYE PREDLOZHENIYA · {today}*\n\nMashiny nizhe rynka na etoy nedele:\n{ru_lines}"
-        "\n\n\U0001f4a1 _Proverit' tsenu:_ \U0001f449 @MVehicleBot"
+        f"\U0001f48e *ARZON / ВЫГОДНО* · {today}\n"
+        f"_bozor medianadan past / ниже медианы рынка_\n\n"
+        f"{rows}\n\n"
+        f"\U0001f4a1 O'z narxingizni tekshiring / Проверьте свою цену\n"
+        f"\U0001f449 @MVehicleBot"
     )
 
 

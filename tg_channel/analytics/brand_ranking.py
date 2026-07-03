@@ -19,26 +19,22 @@ def fetch(django_url: str) -> dict:
 
 
 def build_text(data: dict) -> str:
-    brands = data['brands']
+    brands = data['brands'][:7]
     today  = date.today().strftime('%d.%m.%Y')
+    medal  = ['🥇', '🥈', '🥉']
 
-    uz_lines = [f"  {i+1}. {b['brand']} — {b['count']:,} ta  {pct_arrow(b['pct_change'])}"
-                for i, b in enumerate(brands)]
-    ru_lines = [f"  {i+1}. {b['brand']} — {b['count']:,} шт  {pct_arrow(b['pct_change'])}"
-                for i, b in enumerate(brands)]
+    # Language-neutral data rows (shared between both blocks) → keeps it dense
+    rows = "\n".join(
+        f"{medal[i] if i < 3 else f'  {i+1}.'} *{b['brand']}* — {b['count']:,}  {pct_arrow(b['pct_change'])}"
+        for i, b in enumerate(brands)
+    )
 
     return (
-        f"🚗 *ENG KO'P E'LON BERILGAN MARKALAR*\n"
-        f"📅 {today}\n\n"
-        + "\n".join(uz_lines)
-        + f"\n\n💡 _O'z mashinangiz narxini bilmoqchimisiz?_\n"
-          f"👉 @MVehicleBot — 30 soniyada bepul baho\n"
-          f"\n━━━━━━━━━━━━━━━━━━━━\n\n"
-          f"🚗 *САМЫЕ ПОПУЛЯРНЫЕ МАРКИ НЕДЕЛИ*\n"
-          f"📅 {today}\n\n"
-        + "\n".join(ru_lines)
-        + f"\n\n💡 _Узнайте цену своей машины:_\n"
-          f"👉 @MVehicleBot — бесплатная оценка за 30 секунд"
+        f"🚗 *TOP MARKALAR / ТОП МАРОК* · {today}\n"
+        f"_e'lonlar soni, hafta / объявлений за неделю_\n\n"
+        f"{rows}\n\n"
+        f"💡 O'z narxingizni biling / Узнайте свою цену\n"
+        f"👉 @MVehicleBot — 30 sek"
     )
 
 

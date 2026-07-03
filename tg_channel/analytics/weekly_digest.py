@@ -105,40 +105,24 @@ def _model_line(m: dict, lang: str) -> str:
 
 
 def build_text(data: dict) -> str:
-    brands = data['top_brands']
+    brands = data['top_brands'][:5]
     total  = data['total_listings']
     today  = date.today().strftime('%d.%m.%Y')
 
-    # Build brand blocks (top 5 brands, top 5 models each)
-    uz_blocks, ru_blocks = [], []
-    for b in brands[:5]:
-        uz_lines = [f"🚗 *{b['brand']}* — {b['count']:,} ta e'lon"]
-        ru_lines = [f"🚗 *{b['brand']}* — {b['count']:,} шт"]
-        for m in b.get('models', [])[:5]:
-            uz_lines.append(_model_line(m, 'uz'))
-            ru_lines.append(_model_line(m, 'ru'))
-        uz_blocks.append('\n'.join(uz_lines))
-        ru_blocks.append('\n'.join(ru_lines))
-
-    uz_brands_text = '\n\n'.join(uz_blocks)
-    ru_brands_text = '\n\n'.join(ru_blocks)
+    # Compact: brand · count · avg price (per-model detail lives in the chart).
+    # Language-neutral rows shared by both blocks to stay under Telegram's
+    # 1024-char caption limit.
+    rows = "\n".join(
+        f"🚗 *{b['brand']}* — {b['count']:,} · avg ${b['avg_price']:,}"
+        for b in brands
+    )
 
     return (
-        f"📊 *HAFTALIK HISOBOT · {today}*\n"
-        f"Avtomobil bozori Uzbekiston\n\n"
-        f"📋 Jami e'lonlar: *{total:,}*\n\n"
-        f"🏆 *Top 5 markalar va eng mashhur modellar:*\n\n"
-        f"{uz_brands_text}\n\n"
-        f"💡 _O'z mashinangiz qancha turadi?_\n"
-        f"👉 @MVehicleBot — 30 soniyada bepul baho\n"
-        f"\n━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"📊 *ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ · {today}*\n"
-        f"Авторынок Узбекистана\n\n"
-        f"📋 Всего объявлений: *{total:,}*\n\n"
-        f"🏆 *Топ 5 марок и самые популярные модели:*\n\n"
-        f"{ru_brands_text}\n\n"
-        f"💡 _Сколько стоит ваша машина сейчас?_\n"
-        f"👉 @MVehicleBot — бесплатная оценка за 30 секунд"
+        f"📊 *HAFTALIK HISOBOT / ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ* · {today}\n"
+        f"_jami / всего: *{total:,}* e'lon_\n\n"
+        f"{rows}\n\n"
+        f"💡 O'z mashinangiz narxi / Цена вашей машины\n"
+        f"👉 @MVehicleBot — 30 sek"
     )
 
 
