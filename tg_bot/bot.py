@@ -266,8 +266,9 @@ async def _do_predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ml_high     = int(mileage * 1.25)
     chart_low   = ml_low
     chart_high  = ml_high
+    envelope    = {}   # brand+model+year price envelope when spec is too thin
 
-    # ── 1. Real market data — tries progressively wider mileage bands ──
+    # ── 1. Real market data — relaxes color→gear→mileage before giving up ──
     try:
         r = requests.get(
             f"{DJANGO_URL}/api/cars/smart-price/",
@@ -280,19 +281,31 @@ async def _do_predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Always capture the band returned (used for chart even on ML fallback)
             chart_low  = d.get("mileage_low",  ml_low)
             chart_high = d.get("mileage_high", ml_high)
+            envelope   = {k: d[k] for k in ("envelope_min", "envelope_max", "envelope_median")
+                          if k in d}
             if d.get("price"):
                 price       = d["price"]
                 count       = d["count"]
                 period      = d["period"]
                 band        = d.get("mileage_band", "")
-                source_line = f"📊 *{count} real listings* · {period} · {band}"
+                match       = d.get("match", "")
+                match_note  = f" · {match}" if match and match != "exact" else ""
+                source_line = f"📊 *{count} real listings* · {period}{match_note}"
                 range_line  = f"Range: ${d['min']:,} – ${d['max']:,}"
                 logger.info("Market price: $%d median, %d listings (%s, %s)",
                             price, count, period, band)
     except Exception as e:
         logger.warning("smart-price failed: %s", e)
 
-    # ── 2. ML fallback only when no market data ──
+    # ── 2. Grounded fallback: even a sparse real envelope beats ML, which
+    #       badly under-prices rare/expensive models. ──
+    if price is None and envelope.get("envelope_median"):
+        price       = envelope["envelope_median"]
+        source_line = "📊 _based on similar listings (broader match)_"
+        range_line  = f"Range: ${envelope['envelope_min']:,} – ${envelope['envelope_max']:,}"
+        logger.info("Envelope price: $%d", price)
+
+    # ── 3. ML fallback — last resort, clamped to the real price envelope ──
     if price is None:
         try:
             r = requests.post(
@@ -305,6 +318,13 @@ async def _do_predict(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             if r.status_code == 200:
                 price = round(r.json().get("predicted_price", 0) / 100) * 100
+                # Clamp: the ML model was trained on cheap high-volume cars and
+                # under-prices rare/expensive ones. If we know this model's real
+                # price range, never report outside it.
+                if envelope.get("envelope_min") and price < envelope["envelope_min"]:
+                    price = envelope["envelope_min"]
+                if envelope.get("envelope_max") and price > envelope["envelope_max"]:
+                    price = envelope["envelope_max"]
                 source_line = "🤖 ML estimate _(not enough recent listings)_"
                 logger.info("ML fallback price: $%d", price)
             else:

@@ -590,6 +590,10 @@ class SmartPrice(APIView):
     Required: brand, model, year, gear_type, color, mileage
     """
     MIN_LISTINGS = 5
+    # Junk filter: excludes typos and "first instalment" scam prices that would
+    # otherwise poison the min/median for expensive cars.
+    PRICE_FLOOR = 1500
+    PRICE_CEIL  = 300000
 
     def get(self, request):
         try:
@@ -605,29 +609,38 @@ class SmartPrice(APIView):
                 status=400,
             )
 
-        base_qs = Car.objects.filter(
+        clean = Car.objects.filter(
             brand=brand, model=model_name, year=year,
-            gear_type=gear_type, color=color, price__gt=0,
+            price__gte=self.PRICE_FLOOR, price__lte=self.PRICE_CEIL,
         )
 
-        # Search order: tighter band first, widen only if needed
-        search_plans = [
-            (30, 0.25),   # last 30 days, ±25%
-            (60, 0.25),   # last 60 days, ±25%
-            (30, 0.50),   # last 30 days, ±50%
-            (90, 0.50),   # last 90 days, ±50%
+        # Tiers relax the spec from exact → looser so we stay on REAL market
+        # data as long as possible. The ML fallback badly under-prices rare /
+        # expensive models (it was trained on cheap high-volume cars), so we
+        # only surrender to it after exhausting genuine comparables.
+        #   spec_filter: extra Django filters on top of brand+model+year
+        #   days: recency window · band: ± mileage fraction
+        #   min_n: how many real listings this tier needs to be trusted
+        #   match: human label of how relaxed the match is
+        tiers = [
+            (dict(gear_type=gear_type, color=color), 30, 0.25, 5, "exact"),
+            (dict(gear_type=gear_type, color=color), 90, 0.35, 5, "exact"),
+            (dict(gear_type=gear_type),              90, 0.35, 4, "any color"),
+            (dict(),                                 90, 0.40, 4, "any color/gear"),
+            (dict(),                                180, 0.50, 3, "any color/gear"),
+            (dict(),                                180, 1.00, 3, "any mileage"),
         ]
 
-        for days, band in search_plans:
-            low  = int(mileage * (1 - band))
+        for spec_filter, days, band, min_n, match in tiers:
+            low  = max(0, int(mileage * (1 - band)))
             high = int(mileage * (1 + band))
-            qs = base_qs.filter(
+            qs = clean.filter(
+                **spec_filter,
                 mileage__gte=low, mileage__lte=high,
                 created_at__gte=timezone.now() - timedelta(days=days),
             )
-            count = qs.count()
-            if count >= self.MIN_LISTINGS:
-                prices = sorted(qs.values_list('price', flat=True))
+            prices = sorted(qs.values_list('price', flat=True))
+            if len(prices) >= min_n:
                 median = prices[len(prices) // 2]
                 return Response({
                     "price":        round(median),
@@ -635,26 +648,35 @@ class SmartPrice(APIView):
                     "min":          round(prices[0]),
                     "max":          round(prices[-1]),
                     "source":       f"market_{days}d",
-                    "count":        count,
+                    "count":        len(prices),
                     "period":       f"last {days} days",
+                    "match":        match,
                     "mileage_band": f"{low:,}–{high:,} km",
                     "mileage_low":  low,
                     "mileage_high": high,
                 })
 
-        # No plan found enough data — ML fallback triggered by caller
+        # Truly no comparable real listings anywhere — let the caller try ML,
+        # but hand back the brand+model+year price envelope so the caller can
+        # sanity-clamp the ML number instead of trusting it blindly.
+        envelope = list(
+            clean.values_list('price', flat=True)
+        )
         low  = int(mileage * 0.75)
         high = int(mileage * 1.25)
-        return Response({
+        payload = {
             "price":        None,
             "source":       "insufficient_data",
-            "count":        base_qs.filter(
-                mileage__gte=low, mileage__lte=high,
-                created_at__gte=timezone.now() - timedelta(days=90),
-            ).count(),
+            "count":        len(envelope),
             "mileage_low":  low,
             "mileage_high": high,
-        })
+        }
+        if envelope:
+            envelope.sort()
+            payload["envelope_min"]    = round(envelope[0])
+            payload["envelope_max"]    = round(envelope[-1])
+            payload["envelope_median"] = round(envelope[len(envelope) // 2])
+        return Response(payload)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

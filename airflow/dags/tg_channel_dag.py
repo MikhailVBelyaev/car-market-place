@@ -32,6 +32,19 @@ _START = datetime(2026, 7, 1)
 
 
 with DAG(
+    dag_id="tg_channel_daily_price",
+    default_args=default_args,
+    start_date=_START,
+    schedule_interval="0 10 * * *",  # every day 10:00
+    catchup=False,
+    tags=["channel"],
+) as dag_daily:
+    BashOperator(
+        task_id="post_daily_price",
+        bash_command=_CMD.format(post="daily_price"),
+    )
+
+with DAG(
     dag_id="tg_channel_monday",
     default_args=default_args,
     start_date=_START,

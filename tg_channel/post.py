@@ -54,6 +54,7 @@ DISPATCH = {
     'seasonal_trends':      'analytics.seasonal_trends',
     'market_breadth':       'analytics.market_breadth',
     'mileage_depreciation': 'analytics.mileage_depreciation',
+    'daily_price':          'analytics.daily_price',
 }
 
 POST_TYPES = tuple(DISPATCH.keys())
