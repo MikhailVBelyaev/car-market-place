@@ -4,7 +4,10 @@ from .views import (CarList, CarDetail, FuelTypeSummary, CarFiltersSummary, CarF
                     BrandRanking, PriceMovers, WeeklyDigest,
                     PostConfig, ColorPremium, GearPremium, AgeDepreciation,
                     BestValue, SeasonalTrends, MarketBreadth, MileageDepreciation,
-                    ApartmentList, ElectronicsList)
+                    GearPriceSplit,
+                    ApartmentList, ElectronicsList,
+                    ScraperRunsView, ScraperRunDetailView,
+                    ElectronicsReport, ElectronicsListings)
 
 urlpatterns = [
     path('cars/', CarList.as_view(), name='car-list'),
@@ -32,8 +35,15 @@ urlpatterns = [
     path('cars/analytics/seasonal-trends/',      SeasonalTrends.as_view(),      name='seasonal-trends'),
     path('cars/analytics/market-breadth/',       MarketBreadth.as_view(),       name='market-breadth'),
     path('cars/analytics/mileage-depreciation/', MileageDepreciation.as_view(), name='mileage-depreciation'),
+    path('cars/analytics/gear-price-split/',     GearPriceSplit.as_view(),      name='gear-price-split'),
     # Shortcuts for existing analytics (for admin preview)
     path('cars/analytics/brand-ranking/',  BrandRanking.as_view()),
     path('cars/analytics/price-movers/',   PriceMovers.as_view()),
     path('cars/analytics/weekly-digest/',  WeeklyDigest.as_view()),
+    # Scraper run tracking
+    path('scraper-runs/',              ScraperRunsView.as_view(),      name='scraper-runs'),
+    path('scraper-runs/<int:run_id>/', ScraperRunDetailView.as_view(), name='scraper-run-detail'),
+    # Electronics price reports
+    path('electronics/report/',        ElectronicsReport.as_view(),    name='electronics-report'),
+    path('electronics/listings/',      ElectronicsListings.as_view(),  name='electronics-listings'),
 ]

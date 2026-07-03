@@ -1054,6 +1054,49 @@ class BestValue(APIView):
         return Response({'listings': rows, 'period_days': 7})
 
 
+class GearPriceSplit(APIView):
+    """Median/min/max price for a model, split by transmission, last N days.
+
+    Powers the vertical "shorts" price cards (manual vs automatic). Median +
+    10th–90th percentile range so a couple of scam/outlier prices don't stretch
+    the band. Junk filter drops instalment down-payment listings.
+
+    Query params: brand, model, days (default 7).
+    """
+    GEAR_LABEL = {'AT': 'Automatic', 'MT': 'Manual', 'DSG': 'Dual-clutch', 'CVT': 'CVT'}
+
+    def get(self, request):
+        brand = request.query_params.get('brand', 'Chevrolet')
+        model = request.query_params.get('model', 'Spark')
+        try:
+            days = int(request.query_params.get('days', 7))
+        except (TypeError, ValueError):
+            days = 7
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT gear_type,
+                       COUNT(*) AS cnt,
+                       ROUND(PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY price))::int AS median,
+                       ROUND(PERCENTILE_CONT(0.1)  WITHIN GROUP (ORDER BY price))::int AS low,
+                       ROUND(PERCENTILE_CONT(0.9)  WITHIN GROUP (ORDER BY price))::int AS high
+                FROM marketplace.cars
+                WHERE brand = %s AND model = %s
+                  AND gear_type IN ('AT', 'MT', 'DSG', 'CVT')
+                  AND price BETWEEN 1500 AND 200000
+                  AND mileage BETWEEN 0 AND 400000
+                  AND created_at >= NOW() - INTERVAL '1 day' * %s
+                GROUP BY gear_type
+                HAVING COUNT(*) >= 3
+                ORDER BY median
+            """, [brand, model, days])
+            gears = [
+                {'gear': r[0], 'label': self.GEAR_LABEL.get(r[0], r[0]),
+                 'count': r[1], 'median': r[2], 'low': r[3], 'high': r[4]}
+                for r in cur.fetchall()
+            ]
+        return Response({'brand': brand, 'model': model, 'days': days, 'gears': gears})
+
+
 class SeasonalTrends(APIView):
     """Cheapest / priciest month to buy a SINGLE model — monthly median.
 

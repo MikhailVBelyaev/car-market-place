@@ -55,6 +55,7 @@ DISPATCH = {
     'market_breadth':       'analytics.market_breadth',
     'mileage_depreciation': 'analytics.mileage_depreciation',
     'daily_price':          'analytics.daily_price',
+    'shorts_price':         'analytics.shorts_price',
 }
 
 POST_TYPES = tuple(DISPATCH.keys())
