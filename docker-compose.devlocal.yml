@@ -138,11 +138,45 @@ services:
       - scrape_electronics
     # Usage: docker compose -f docker-compose.devlocal.yml -p car-dev --profile scrape_electronics run --rm scraper_electronics
 
+  scraper_electronics_auto:
+    build:
+      context: ./scraper
+    command: >
+      sh -c "until curl -sf http://django:8000/ > /dev/null; do sleep 5; done;
+             while true; do
+               python /app/scrape_electronics.py;
+               echo '⏳ Electronics scraper sleeping 6h...';
+               sleep 21600;
+             done"
+    environment:
+      - DJANGO_URL=http://django:8000
+    depends_on:
+      django:
+        condition: service_healthy
+    restart: always
+
+  ops_bot:
+    build:
+      context: ./ops_bot
+    restart: always
+    env_file:
+      - ./ops_bot/.env
+    depends_on:
+      django:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - ops-bot
+
   tg_channel:
     build:
       context: ./tg_channel
     env_file:
       - ./tg_channel/.env
+    volumes:
+      # Car photos for vertical shorts — add/replace without rebuilding the image
+      - ./tg_channel/assets:/app/assets:ro
     depends_on:
       django:
         condition: service_healthy

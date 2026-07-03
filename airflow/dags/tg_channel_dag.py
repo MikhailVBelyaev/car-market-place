@@ -45,6 +45,19 @@ with DAG(
     )
 
 with DAG(
+    dag_id="tg_channel_shorts",
+    default_args=default_args,
+    start_date=_START,
+    schedule_interval="0 18 * * *",  # every day 18:00
+    catchup=False,
+    tags=["channel"],
+) as dag_shorts:
+    BashOperator(
+        task_id="post_shorts_price",
+        bash_command=_CMD.format(post="shorts_price"),
+    )
+
+with DAG(
     dag_id="tg_channel_monday",
     default_args=default_args,
     start_date=_START,

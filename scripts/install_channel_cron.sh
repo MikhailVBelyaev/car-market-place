@@ -5,6 +5,7 @@
 #
 # Schedule (matches airflow/dags/tg_channel_dag.py):
 #   Daily 10:00 → daily_price        (price-by-year card + bot ad, rotates model)
+#   Daily 18:00 → shorts_price       (vertical 9:16 manual-vs-automatic card, rotates model)
 #   Mon 09:00 → brand_ranking        (market share)
 #   Wed 09:00 → best_value           (real below-median deals, last 7d)
 #   Fri 09:00 → age_depreciation     (per-model median curve)
@@ -20,6 +21,7 @@ MARK_END="# <<< uzvehicles channel posts <<<"
 BLOCK="$(cat <<EOF
 ${MARK_BEGIN}
 0 10 * * * ${SCRIPT} daily_price
+0 18 * * * ${SCRIPT} shorts_price
 0 9 * * 1 ${SCRIPT} brand_ranking
 0 9 * * 3 ${SCRIPT} best_value
 0 9 * * 5 ${SCRIPT} age_depreciation

@@ -21,11 +21,12 @@ import matplotlib.pyplot as plt
 from matplotlib import image as mpimg
 from matplotlib.patches import FancyBboxPatch
 
-# Popular models with reliable weekly volume and a real gearbox mix.
+# Models with reliable weekly volume AND both transmissions (manual + automatic)
+# so the manual-vs-automatic split always has two cards to compare.
 FEATURED = [
-    ('Chevrolet', 'Spark'),  ('Chevrolet', 'Nexia'),  ('Chevrolet', 'Cobalt'),
-    ('Chevrolet', 'Lacetti'),('Chevrolet', 'Gentra'), ('Chevrolet', 'Malibu'),
-    ('Chevrolet', 'Captiva'),('Chevrolet', 'Tracker'),
+    ('Chevrolet', 'Spark'),   ('Chevrolet', 'Nexia'),
+    ('Chevrolet', 'Cobalt'),  ('Chevrolet', 'Lacetti'),
+    ('Chevrolet', 'Malibu'),  ('Chevrolet', 'Onix'),
 ]
 
 INK     = '#0D1B2A'   # deep navy
@@ -52,10 +53,20 @@ def fetch(django_url, brand, model, days=7):
     return r.json()
 
 
+def _find_asset(brand, model):
+    """Return the first matching photo for the model, any common extension."""
+    stem = f"{brand}_{model}".lower()
+    for ext in ('.jpg', '.jpeg', '.png', '.webp'):
+        path = os.path.join(ASSET_DIR, stem + ext)
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def _draw_background(ax, brand, model):
     """Dimmed car photo if available, else a vertical navy gradient."""
-    asset = os.path.join(ASSET_DIR, f"{brand}_{model}.jpg".lower())
-    if os.path.exists(asset):
+    asset = _find_asset(brand, model)
+    if asset:
         try:
             img = mpimg.imread(asset)
             ax.imshow(img, extent=[0, 1, 0, 1], aspect='auto', zorder=0)
