@@ -63,24 +63,76 @@ def _find_asset(brand, model):
     return None
 
 
+CANVAS_ASPECT = 9 / 16   # matches figsize=(9, 16) below — width/height
+
+
 def _draw_background(ax, brand, model):
-    """Dimmed car photo if available, else a vertical navy gradient."""
-    asset = _find_asset(brand, model)
-    if asset:
-        try:
-            img = mpimg.imread(asset)
-            ax.imshow(img, extent=[0, 1, 0, 1], aspect='auto', zorder=0)
-            # dark overlay so text stays readable
-            overlay = np.zeros((10, 10, 4))
-            overlay[..., 3] = 0.62          # black, 62% opacity
-            ax.imshow(overlay, extent=[0, 1, 0, 1], aspect='auto', zorder=1)
-            return
-        except Exception:
-            pass
+    """Dark base + (if available) a dimmed car photo, aspect-correct.
+
+    The photo is "contain"-fit (scaled to preserve its own aspect ratio,
+    centered, letterboxed against the dark base) rather than stretched to
+    fill the 9:16 frame — stretching distorts the car (e.g. a landscape
+    studio shot gets squashed tall). The dark base is drawn first so the
+    letterbox bands read as intentional, not empty.
+    """
     grad = np.linspace(0, 1, 256).reshape(-1, 1)
     ax.imshow(grad, extent=[0, 1, 0, 1], aspect='auto', cmap='cividis',
               alpha=0.55, zorder=0)
     ax.add_patch(plt_rect(0, 0, 1, 1, INK, alpha=0.55, z=1))
+
+    asset = _find_asset(brand, model)
+    if not asset:
+        return
+    try:
+        img = mpimg.imread(asset)
+    except Exception:
+        return
+
+    h, w = img.shape[0], img.shape[1]
+    img_aspect = w / h
+
+    if img_aspect > CANVAS_ASPECT:
+        # image is relatively wider than the frame → fit to full width,
+        # letterbox top/bottom
+        disp_h = CANVAS_ASPECT / img_aspect
+        x0, x1 = 0.0, 1.0
+        y0 = (1 - disp_h) / 2
+        y1 = y0 + disp_h
+    else:
+        # image is relatively taller than the frame → fit to full height,
+        # letterbox left/right
+        disp_w = img_aspect / CANVAS_ASPECT
+        y0, y1 = 0.0, 1.0
+        x0 = (1 - disp_w) / 2
+        x1 = x0 + disp_w
+
+    faded = _fade_edges(img)
+    ax.imshow(faded, extent=[x0, x1, y0, y1], aspect='auto', zorder=1.2)
+    overlay = np.zeros((10, 10, 4))
+    overlay[..., 3] = 0.62          # black, 62% opacity
+    ax.imshow(overlay, extent=[x0, x1, y0, y1], aspect='auto', zorder=1.3)
+
+
+def _fade_edges(img, frac=0.22):
+    """RGBA copy of img with the top/bottom edges feathered to transparent.
+
+    All source photos are landscape catalog shots (aspect 1.5-2.0) being
+    letterboxed into a 9:16 frame, so without this the photo band would show
+    a hard rectangular seam against the gradient background.
+    """
+    arr = np.asarray(img, dtype=np.float32)
+    if arr.max() > 1.0:
+        arr = arr / 255.0
+    if arr.shape[2] == 3:
+        arr = np.dstack([arr, np.ones(arr.shape[:2], dtype=np.float32)])
+    else:
+        arr = arr.copy()
+
+    fade_px = max(1, int(arr.shape[0] * frac))
+    ramp = np.linspace(0, 1, fade_px, dtype=np.float32)
+    arr[:fade_px, :, 3]  *= ramp[:, None]
+    arr[-fade_px:, :, 3] *= ramp[::-1][:, None]
+    return arr
 
 
 def plt_rect(x, y, w, h, color, alpha=1.0, z=1, radius=0.0):
