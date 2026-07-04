@@ -1,0 +1,47 @@
+categories:
+  - id: macbook
+    label: "💻 MacBook"
+    emoji: "💻"
+    report_label: "MacBook"
+  - id: mac
+    label: "🖥 Mac (mini/Studio/iMac)"
+    emoji: "🖥"
+    report_label: "Mac"
+  - id: iphone
+    label: "📱 iPhone"
+    emoji: "📱"
+    report_label: "iPhone"
+  - id: ipad
+    label: "📟 iPad"
+    emoji: "📟"
+    report_label: "iPad"
+  - id: gpu
+    label: "🎮 GPU"
+    emoji: "🎮"
+    report_label: "GPU"
+  - id: ram
+    label: "🧠 RAM"
+    emoji: "🧠"
+    report_label: "RAM"
+  - id: cpu
+    label: "⚡ CPU"
+    emoji: "⚡"
+    report_label: "CPU"
+  - id: console
+    label: "🕹 Console"
+    emoji: "🕹"
+    report_label: "Gaming Console"
+  - id: ssd
+    label: "💾 SSD"
+    emoji: "💾"
+    report_label: "SSD"
+
+periods:
+  - id: "1"
+    label: "Today"
+  - id: "3"
+    label: "3 Days"
+  - id: "7"
+    label: "7 Days"
+  - id: "0"
+    label: "All Time"

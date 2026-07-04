@@ -22,6 +22,8 @@ COPY ./run_task_scraping_olx_vehicle.py /app/run_task_scraping_olx_vehicle.py
 # v2: optimized version with concurrency, rate limiting, dedup
 COPY ./run_task_scraping_olx_vehicle_v2.py /app/run_task_scraping_olx_vehicle_v2.py
 COPY ./brands_models.json /app/brands_models.json
+# Shared utilities
+COPY ./scraper_utils.py /app/scraper_utils.py
 # New category scrapers (apartments + electronics) and their configs
 COPY ./scrape_apartments.py /app/scrape_apartments.py
 COPY ./scrape_apartments_config.json /app/scrape_apartments_config.json

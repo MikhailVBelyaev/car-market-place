@@ -1,9 +1,14 @@
 {
   "categories": [
-    {"name": "gpu", "url": "https://www.olx.uz/elektronika/kompyutery-i-komplektuyuschie/videokarty/", "max_pages": 10},
-    {"name": "iphone", "url": "https://www.olx.uz/elektronika/telefony-i-aksessuary/mobilnye-telefony-smartfony/?search[filter_enum_brand][0]=apple", "max_pages": 30},
-    {"name": "macbook", "url": "https://www.olx.uz/elektronika/noutbuki-i-aksessuary/noutbuki/?search[filter_enum_brand][0]=apple", "max_pages": 15},
-    {"name": "ipad", "url": "https://www.olx.uz/elektronika/telefony-i-aksessuary/planshety/?search[filter_enum_brand][0]=apple", "max_pages": 10}
+    {"name": "gpu",     "url": "https://www.olx.uz/elektronika/kompyutery/komplektuyuschie/videokarty/",  "max_pages": 10},
+    {"name": "iphone",  "url": "https://www.olx.uz/elektronika/telefony/mobilnye-telefony/",              "max_pages": 30},
+    {"name": "macbook", "url": "https://www.olx.uz/elektronika/kompyutery/noutbuki/",                     "max_pages": 15},
+    {"name": "mac",     "url": "https://www.olx.uz/elektronika/kompyutery/nastolnye/",                  "max_pages": 10},
+    {"name": "ipad",    "url": "https://www.olx.uz/elektronika/kompyutery/planshetnye-kompyutery/",          "max_pages": 10},
+    {"name": "ram",     "url": "https://www.olx.uz/elektronika/kompyutery/komplektuyuschie/moduli-pamyati/",    "max_pages": 10},
+    {"name": "cpu",     "url": "https://www.olx.uz/elektronika/kompyutery/komplektuyuschie/protsessory/",     "max_pages": 10},
+    {"name": "console", "url": "https://www.olx.uz/elektronika/igry-i-igrovye-pristavki/pristavki/",          "max_pages": 15},
+    {"name": "ssd",     "url": "https://www.olx.uz/elektronika/kompyutery/komplektuyuschie/zhestkie-diski/",  "max_pages": 20}
   ],
   "django_api_url": "http://django:8000",
   "sleep_between_requests": 1.5,

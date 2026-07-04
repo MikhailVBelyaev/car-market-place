@@ -12,6 +12,7 @@ Each category writes a JSONB `specs` blob tailored to its kind:
   iphone  -> {"storage_gb", "color"}
   macbook -> {"ram_gb", "storage_gb", "chip"}
   ipad    -> {"storage_gb", "color"}
+  mac     -> {"ram_gb", "storage_gb", "chip", "model_type"}  (Mac mini / Mac Studio / iMac)
 
 Config lives in scrape_electronics_config.json.
 
@@ -35,6 +36,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
+
+from scraper_utils import RunTracker, human_sleep, EARLY_STOP_THRESHOLD
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'scrape_electronics_config.json')
 
@@ -183,12 +186,18 @@ def map_condition(val):
 def detect_category(category_name, title):
     """Prefer the configured category; fall back to keyword detection in title."""
     t = (title or '').lower()
-    if category_name in ('gpu', 'iphone', 'macbook', 'ipad'):
+    if category_name in ('gpu', 'iphone', 'macbook', 'mac', 'ipad', 'ram', 'cpu', 'console', 'ssd'):
+        # The "mac" scrape category (desktop computers listing page) also carries
+        # non-Apple desktops — narrow it down to Mac mini / Mac Studio / iMac only.
+        if category_name == 'mac' and not any(k in t for k in ('mac mini', 'macmini', 'mac studio', 'macstudio', 'imac')):
+            return 'other'
         return category_name
     if 'airpods' in t:
         return 'airpods'
     if 'macbook' in t:
         return 'macbook'
+    if any(k in t for k in ('mac mini', 'macmini', 'mac studio', 'macstudio', 'imac')):
+        return 'mac'
     if 'ipad' in t:
         return 'ipad'
     if 'iphone' in t:
@@ -228,6 +237,150 @@ def parse_brand_model(category, title):
             model = ' '.join(parts)
         else:
             model = 'AirPods'
+        return brand, model
+
+    # Desktop Macs: Mac mini / Mac Studio / iMac
+    if category == 'mac':
+        brand = 'Apple'
+        if 'mac studio' in low or 'macstudio' in low:
+            model = 'Mac Studio'
+        elif 'mac mini' in low or 'macmini' in low:
+            model = 'Mac Mini'
+        elif 'imac' in low:
+            model = 'iMac'
+        else:
+            model = 'Mac'
+        chip = re.search(r'(m[1-4](?:\s*(?:pro|max|ultra))?)', low)
+        if chip:
+            model += ' ' + chip.group(1).upper().strip()
+        return brand, model
+
+    # Non-Mac desktop listings picked up from the same "nastolnye" scrape page
+    if category == 'other':
+        return None, None
+
+    # RAM
+    if category == 'ram':
+        brand = None
+        for b in ('Kingston', 'Corsair', 'Samsung', 'Crucial', 'Hynix', 'Micron',
+                  'G.Skill', 'Patriot', 'Adata', 'Team', 'Apacer', 'Goodram'):
+            if b.lower() in low:
+                brand = b
+                break
+        # model = DDR type + capacity, e.g. "DDR4 8GB", "DDR5 16GB"
+        m = re.search(r'(ddr[345]?(?:\s*\d+)?\s*\d+\s*(?:gb|гб))', low)
+        model = m.group(1).upper().replace('ГБ', 'GB').replace('  ', ' ').strip() if m else None
+        if not model:
+            m2 = re.search(r'(ddr[345]?\s*\d*)', low)
+            model = m2.group(1).upper().strip() if m2 else 'RAM'
+        return brand, model
+
+    # Console
+    if category == 'console':
+        brand = None
+        low_t = (title or '').lower()
+        if 'playstation' in low_t or 'ps5' in low_t or 'ps4' in low_t or 'ps3' in low_t:
+            brand = 'Sony'
+            m = re.search(r'(ps\s*[345]|playstation\s*[345])', low_t)
+            gen = m.group(1).upper().replace(' ', '') if m else None
+            if gen:
+                slim  = 'Slim'  if 'slim'  in low_t else ''
+                pro   = 'Pro'   if ' pro'  in low_t else ''
+                digi  = 'Digital' if 'digital' in low_t else ''
+                suf   = ' '.join(filter(None, [slim, pro, digi]))
+                model = f"PlayStation {gen[-1]}" + (f' {suf}' if suf else '')
+            else:
+                model = 'PlayStation'
+        elif 'xbox' in low_t:
+            brand = 'Microsoft'
+            if 'series x' in low_t:
+                model = 'Xbox Series X'
+            elif 'series s' in low_t:
+                model = 'Xbox Series S'
+            elif 'one x' in low_t:
+                model = 'Xbox One X'
+            elif 'one s' in low_t:
+                model = 'Xbox One S'
+            elif 'one' in low_t:
+                model = 'Xbox One'
+            elif '360' in low_t:
+                model = 'Xbox 360'
+            else:
+                model = 'Xbox'
+        elif 'nintendo' in low_t or 'switch' in low_t:
+            brand = 'Nintendo'
+            if 'switch 2' in low_t:
+                model = 'Nintendo Switch 2'
+            elif 'switch lite' in low_t:
+                model = 'Nintendo Switch Lite'
+            elif 'switch oled' in low_t or 'oled' in low_t:
+                model = 'Nintendo Switch OLED'
+            elif 'switch' in low_t:
+                model = 'Nintendo Switch'
+            else:
+                model = 'Nintendo'
+        else:
+            brand = None
+            model = 'Console'
+        return brand, model
+
+    # CPU
+    if category == 'cpu':
+        if 'intel' in low or 'core' in low or re.search(r'i[3579]-\d', low):
+            brand = 'Intel'
+            m = re.search(r'(core\s*i[3579][\s-]*\d{4,5}[a-z]*)', low)
+            model = ('Intel ' + m.group(1).title().replace('Core', 'Core').strip()) if m else 'Intel Core'
+        elif 'ryzen' in low or 'amd' in low:
+            brand = 'AMD'
+            m = re.search(r'(ryzen\s*[3579]\s*\d{4}[a-z]*)', low)
+            model = ('AMD ' + m.group(1).title().strip()) if m else 'AMD Ryzen'
+        elif 'xeon' in low:
+            brand = 'Intel'
+            model = 'Intel Xeon'
+        else:
+            brand = None
+            model = 'CPU'
+        return brand, model
+
+    # SSD
+    if category == 'ssd':
+        for b in ('Samsung', 'Kingston', 'WD', 'Western Digital', 'Crucial', 'Seagate',
+                  'Toshiba', 'Transcend', 'ADATA', 'Patriot', 'Corsair', 'Sabrent',
+                  'SK Hynix', 'Micron', 'Intel', 'Netac', 'Silicon Power', 'Team'):
+            if b.lower() in low:
+                brand = b
+                break
+        else:
+            brand = None
+
+        # Interface type first
+        if 'nvme' in low or 'm.2' in low or 'pcie' in low:
+            iface = 'NVMe'
+        elif 'sata' in low or '2.5' in low:
+            iface = 'SATA'
+        else:
+            iface = None
+
+        # Skip if it's actually an HDD (no SSD/NVMe/M.2 markers)
+        is_ssd = any(k in low for k in ('ssd', 'nvme', 'm.2', 'твердотельный'))
+        if not is_ssd:
+            return None, None  # will be skipped by caller
+
+        cap = re.search(r'(\d+)\s*(?:tb|тб)\b', low)
+        if cap:
+            capacity = f"{cap.group(1)}TB"
+        else:
+            cap = re.search(r'(\d+)\s*(?:gb|гб)\b', low)
+            capacity = f"{cap.group(1)}GB" if cap else None
+
+        if iface and capacity:
+            model = f"{iface} {capacity}"
+        elif capacity:
+            model = f"SSD {capacity}"
+        elif iface:
+            model = f"{iface} SSD"
+        else:
+            model = 'SSD'
         return brand, model
 
     # GPU: brand = chip maker, model = the card series in the title
@@ -285,6 +438,76 @@ def parse_specs(category, title, params_text):
         if chip:
             specs['chip'] = chip.group(1).upper().strip()
 
+    elif category == 'mac':
+        ram = re.search(r'(\d+)\s*(?:gb|гб)\s*(?:ram|озу|память)?', low)
+        if ram:
+            specs['ram_gb'] = _to_int(ram.group(1))
+        storage = re.search(r'(\d+)\s*(?:gb|гб|tb|тб)\s*(?:ssd|накопит|памят)', low)
+        if storage:
+            val = _to_int(storage.group(1))
+            if 'tb' in storage.group(0) or 'тб' in storage.group(0):
+                val = (val or 0) * 1024
+            specs['storage_gb'] = val
+        chip = re.search(r'(m[1-4](?:\s*(?:pro|max|ultra))?)', low)
+        if chip:
+            specs['chip'] = chip.group(1).upper().strip()
+        if 'mac studio' in low or 'macstudio' in low:
+            specs['model_type'] = 'Mac Studio'
+        elif 'mac mini' in low or 'macmini' in low:
+            specs['model_type'] = 'Mac Mini'
+        elif 'imac' in low:
+            specs['model_type'] = 'iMac'
+
+    elif category == 'ssd':
+        if 'nvme' in low or 'm.2' in low or 'pcie' in low:
+            specs['interface'] = 'NVMe'
+        elif 'sata' in low or '2.5' in low:
+            specs['interface'] = 'SATA'
+        cap = re.search(r'(\d+)\s*tb\b', low)
+        if cap:
+            specs['capacity_gb'] = int(cap.group(1)) * 1024
+        else:
+            cap = re.search(r'(\d+)\s*(?:gb|гб)\b', low)
+            if cap:
+                specs['capacity_gb'] = _to_int(cap.group(1))
+
+    elif category == 'console':
+        if re.search(r'ps\s*5|playstation\s*5', low):
+            specs['generation'] = 'PS5'
+        elif re.search(r'ps\s*4|playstation\s*4', low):
+            specs['generation'] = 'PS4'
+        elif re.search(r'ps\s*3|playstation\s*3', low):
+            specs['generation'] = 'PS3'
+        elif 'series x' in low:
+            specs['generation'] = 'Xbox Series X'
+        elif 'series s' in low:
+            specs['generation'] = 'Xbox Series S'
+        controllers = re.search(r'(\d+)\s*(?:джойст|контролл|gamepad|геймпад)', low)
+        if controllers:
+            specs['controllers'] = _to_int(controllers.group(1))
+
+    elif category == 'ram':
+        m = re.search(r'(\d+)\s*(?:gb|гб)', low)
+        if m:
+            specs['capacity_gb'] = _to_int(m.group(1))
+        speed = re.search(r'(\d{3,5})\s*(?:mhz|мгц)', low)
+        if speed:
+            specs['speed_mhz'] = _to_int(speed.group(1))
+        ddr = re.search(r'(ddr[345]?\d*)', low)
+        if ddr:
+            specs['type'] = ddr.group(1).upper()
+
+    elif category == 'cpu':
+        m = re.search(r'(i[3579]-\d{4,5}[a-z]*)', low)
+        if m:
+            specs['model_id'] = m.group(1).upper()
+        r = re.search(r'(ryzen\s*[3579]\s*\d{4}[a-z]*)', low)
+        if r:
+            specs['model_id'] = r.group(1).title()
+        cores = re.search(r'(\d+)\s*(?:core|ядр)', low)
+        if cores:
+            specs['cores'] = _to_int(cores.group(1))
+
     return specs or None
 
 
@@ -333,6 +556,8 @@ def parse_detail(detail_html, card, category_name):
         condition = map_condition(title) or map_condition(params_text)
 
     brand, model = parse_brand_model(category, title)
+    if brand is None and model is None and category in ('ssd', 'other'):
+        return None  # HDD/unrecognised drive, or non-Mac desktop — skip
     specs = parse_specs(category, title, params_text)
 
     description = None
@@ -417,12 +642,16 @@ def save_to_db(records, existing_ids):
             logging.error(f"Request failed for electronics {rec.get('ad_id')}: {e}")
 
 
-def scrape_category(category, existing_ids):
+def scrape_category(category, existing_ids, tracker: RunTracker):
     name = category["name"]
     base_url = category["url"]
     max_pages = category.get("max_pages", 1)
 
-    all_records = []
+    is_first_run = len(existing_ids) == 0
+    consecutive_empty = 0
+    total_saved = 0
+    pages_done = 0
+
     for page in range(1, max_pages + 1):
         url = _page_url(base_url, page)
         try:
@@ -446,19 +675,47 @@ def scrape_category(category, existing_ids):
                 continue
             to_fetch.append(card)
 
+        if not is_first_run and len(to_fetch) == 0:
+            consecutive_empty += 1
+            log(f"[{name}] page {page}: all {len(cards)} already in DB "
+                f"({consecutive_empty}/{EARLY_STOP_THRESHOLD} empty)")
+            if consecutive_empty >= EARLY_STOP_THRESHOLD:
+                log(f"🛑 [{name}] Early stop — DB is up to date (page {page})")
+                tracker.update(pages_scraped=pages_done, new_records=total_saved, early_stopped=True)
+                return total_saved, True
+        else:
+            consecutive_empty = 0
+
+        page_records = []
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = [executor.submit(fetch_and_build, c, name) for c in to_fetch]
             for fut in futures:
                 try:
                     rec = fut.result()
                     if rec:
-                        all_records.append(rec)
+                        page_records.append(rec)
                 except Exception as e:
                     log(f"❌ Detail worker failed: {e}")
 
-        log(f"[{name}] page {page}: {len(cards)} cards, {len(to_fetch)} new fetched")
+        pages_done += 1
+        log(f"[{name}] page {page}: {len(cards)} cards, {len(to_fetch)} new, {len(page_records)} built")
 
-    return all_records
+        if TEST_MODE:
+            out_path = os.path.join(
+                os.path.dirname(__file__), f"test_electronics_{name}_p{page}.json"
+            )
+            with open(out_path, 'w', encoding='utf-8') as f:
+                json.dump(page_records, f, ensure_ascii=False, indent=2, default=str)
+            log(f"✅ Test: saved {len(page_records)} records to {out_path}")
+        elif page_records:
+            save_to_db(page_records, existing_ids)
+            total_saved += len(page_records)
+            log(f"[{name}] page {page}: saved {len(page_records)} (total: {total_saved})")
+            tracker.update(pages_scraped=pages_done, new_records=total_saved)
+
+        human_sleep()
+
+    return total_saved, False
 
 
 def main():
@@ -466,21 +723,19 @@ def main():
     existing_ids = load_existing_ad_ids()
 
     for category in CONFIG["categories"]:
+        cat_name = category.get('name', 'unknown')
+        tracker = RunTracker('electronics', category=cat_name)
+        if not TEST_MODE:
+            tracker.start()
         try:
-            records = scrape_category(category, existing_ids)
+            new, early = scrape_category(category, existing_ids, tracker)
+            if not TEST_MODE:
+                tracker.finish(total_records=new, early_stopped=early)
         except Exception as e:
-            log(f"❌ Failed to scrape category {category.get('name')}: {e}")
+            log(f"❌ Failed to scrape category {cat_name}: {e}")
+            if not TEST_MODE:
+                tracker.finish_error(str(e))
             continue
-
-        if TEST_MODE:
-            out_path = os.path.join(
-                os.path.dirname(__file__), f"test_electronics_{category['name']}.json"
-            )
-            with open(out_path, 'w', encoding='utf-8') as f:
-                json.dump(records, f, ensure_ascii=False, indent=2, default=str)
-            log(f"✅ Test mode: saved {len(records)} records to {out_path}")
-        else:
-            save_to_db(records, existing_ids)
 
     log(f"Electronics scrape completed at {datetime.now()}")
 
