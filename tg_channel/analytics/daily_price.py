@@ -79,15 +79,16 @@ def build_text(entry):
     today = date.today().strftime('%d.%m.%Y')
 
     # Compact 4-row comparison (newest → older), plus one mid + one old anchor.
-    newest = years[-1]
     picks = [years[-1], years[-3] if len(years) >= 3 else years[-1],
              years[len(years) // 2], years[0]]
-    seen, rows = set(), []
+    seen, deduped = set(), []
     for y in picks:
         if y['year'] in seen:
             continue
         seen.add(y['year'])
-        rows.append(f"  `{y['year']}` — *${y['median_price']:,}*")
+        deduped.append(y)
+    deduped.sort(key=lambda y: y['year'], reverse=True)  # render newest → oldest
+    rows = [f"  `{y['year']}` — *${y['median_price']:,}*" for y in deduped]
     table = "\n".join(rows)
 
     return (
