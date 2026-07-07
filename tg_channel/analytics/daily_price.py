@@ -94,12 +94,14 @@ def build_text(entry):
     return (
         f"💰 *{name} — HOZIRGI NARX*  ·  {today}\n"
         f"{table}\n"
-        f"\n🔎 _O'z mashinangiz narxini bilasizmi?_\n"
+        f"\n📊 Yangi tahlillar va narxlar: @UzVehiclesMarket\n"
+        f"🔎 _O'z mashinangiz narxini bilasizmi?_\n"
         f"👉 @MVehicleBot — 30 soniyada aniq baho\n"
         f"\n━━━━━━━━━━━━━━━━━━━━\n"
         f"💰 *{name} — ЦЕНА СЕЙЧАС*  ·  {today}\n"
         f"{table}\n"
-        f"\n🔎 _Знаете цену своей машины?_\n"
+        f"\n📊 Свежая аналитика и цены: @UzVehiclesMarket\n"
+        f"🔎 _Знаете цену своей машины?_\n"
         f"👉 @MVehicleBot — точная оценка за 30 секунд"
     )
 
